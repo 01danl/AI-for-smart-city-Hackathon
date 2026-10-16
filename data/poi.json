@@ -8288,7 +8288,9 @@
   "tags": [
    "cafe",
    "coffee",
-   "cuisine_regional,pizza,asian",
+   "cuisine_asian",
+   "cuisine_pizza",
+   "cuisine_regional",
    "food"
   ],
   "opening_hours": null,
@@ -17979,28 +17981,6 @@
   "contacts": {
    "phone": null,
    "website": null
-  },
-  "rating": null,
-  "source": "osm",
-  "collected_at": "2026-10-16"
- },
- {
-  "id": "osm_way_230409020",
-  "name": "проспект Мәңгілік Ел",
-  "lat": 51.118264,
-  "lon": 71.436526,
-  "description": null,
-  "category": "restaurant",
-  "tags": [
-   "cuisine_kazakh",
-   "food",
-   "restaurant",
-   "wheelchair"
-  ],
-  "opening_hours": "10:00-02:00",
-  "contacts": {
-   "phone": "+7 7172 248 111, +7 701 929 80 21",
-   "website": "https://arka.kz/"
   },
   "rating": null,
   "source": "osm",

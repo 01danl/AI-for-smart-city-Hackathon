@@ -14,6 +14,7 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import sys
 import time
 from datetime import date
@@ -61,6 +62,11 @@ CATEGORY_MAP: dict[str, dict[str, str]] = {
 }
 
 FOOD_CATEGORIES = {"cafe", "restaurant", "fast_food", "bar"}
+
+# Mapping errors where the street address was put into `name`.
+ADDRESS_NAME_RE = re.compile(
+    r"^(проспект|улица|ул\.|пр\.|шоссе|переулок)\s|\s(даңғылы|көшесі)$", re.IGNORECASE
+)
 
 
 def build_query(bbox: tuple[float, float, float, float], timeout: int = 180) -> str:
@@ -111,7 +117,7 @@ def _derived_tags(tags: dict[str, str], category: str) -> list[str]:
     for key in ("amenity", "tourism", "leisure", "shop", "historic"):
         if key in tags:
             out.add(tags[key])
-    for c in tags.get("cuisine", "").split(";"):
+    for c in re.split(r"[;,]", tags.get("cuisine", "")):
         if c.strip():
             out.add(f"cuisine_{c.strip().lower()}")
     if category == "cafe" and tags.get("amenity") == "cafe":
@@ -151,7 +157,7 @@ def normalize(element: dict, collected_at: str) -> POI | None:
     tags = element.get("tags", {})
     name = _name(tags)
     category = _category(tags)
-    if not name or not category:
+    if not name or not category or ADDRESS_NAME_RE.search(name):
         return None
     if "lat" in element:
         lat, lon = element["lat"], element["lon"]
