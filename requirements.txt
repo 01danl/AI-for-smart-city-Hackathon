@@ -1,0 +1,17 @@
+# Core
+pydantic>=2.7
+python-dotenv>=1.0
+requests>=2.32
+
+# Retrieval (role A)
+chromadb>=0.5
+sentence-transformers>=3.0
+
+# Generation / API / UI (role B)
+anthropic>=0.40
+fastapi>=0.115
+uvicorn[standard]>=0.30
+streamlit>=1.38
+
+# Dev
+pytest>=8.0
