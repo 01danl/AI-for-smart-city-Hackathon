@@ -69,19 +69,33 @@ def _parse_times(spec: str) -> list[tuple[int, int]]:
     return ranges
 
 
+def _split_rules(hours: str) -> list[str]:
+    # Normalize "12:00 - 06:00" -> "12:00-06:00".
+    hours = re.sub(r"\s*-\s*(?=\d)", "-", hours)
+    # Rules are separated by ";" and, informally, by ", " right after a time
+    # ("Mo-Fr 08:00-00:00, Sa-Su 09:00-00:00").
+    parts = re.split(rf";|(?<=\d),\s*(?={_DAY_RE}|PH)", hours)
+    return [p.strip() for p in parts if p.strip()]
+
+
+def _strip_ph(spec: str) -> str:
+    """Drop public-holiday markers from a day list: we can't resolve holidays."""
+    return ",".join(d for d in spec.split(",") if d != "PH")
+
+
 def _parse(hours: str) -> dict[int, list[tuple[int, int]]]:
     """Return {weekday: [(start_min, end_min), ...]}; later rules override earlier ones."""
     schedule: dict[int, list[tuple[int, int]]] = {}
-    for rule in (r.strip() for r in hours.split(";")):
-        if not rule:
-            continue
+    for rule in _split_rules(hours):
         if rule == "24/7":
             for d in range(7):
                 schedule[d] = [(0, 24 * 60)]
             continue
-        if rule.startswith("PH"):  # public holidays: ignore, we can't resolve them
-            continue
         tokens = rule.split(maxsplit=1)
+        if "PH" in tokens[0].split(","):
+            tokens[0] = _strip_ph(tokens[0])
+            if not tokens[0]:  # holiday-only rule
+                continue
         if _DAYSPEC_RE.match(tokens[0]):
             days = _parse_days(tokens[0])
             rest = tokens[1].strip() if len(tokens) > 1 else ""
