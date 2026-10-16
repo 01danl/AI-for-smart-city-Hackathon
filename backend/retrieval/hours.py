@@ -62,8 +62,14 @@ def _parse_times(spec: str) -> list[tuple[int, int]]:
         if not m:
             raise _Unparseable(part)
         h1, m1, h2, m2 = map(int, m.groups())
+        if h1 > 24 or h2 > 24 or m1 > 59 or m2 > 59:
+            raise _Unparseable(part)
         start, end = h1 * 60 + m1, h2 * 60 + m2
-        if end <= start:  # overnight, e.g. 18:00-02:00 or 00:00-24:00 edge
+        if end == start:
+            if start != 0:  # "10:00-10:00" is ambiguous (24h or a typo): don't guess
+                raise _Unparseable(part)
+            end = 24 * 60  # "00:00-00:00" is common OSM shorthand for round-the-clock
+        if end < start:  # overnight, e.g. 18:00-02:00
             end += 24 * 60
         ranges.append((start, end))
     return ranges
