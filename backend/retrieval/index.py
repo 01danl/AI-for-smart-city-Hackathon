@@ -53,19 +53,22 @@ def embed(texts: list[str]) -> list[list[float]]:
     return vecs.tolist()
 
 
+def _client():
+    import chromadb
+    from chromadb.config import Settings
+
+    # Telemetry off: nothing about queries or usage leaves the machine.
+    return chromadb.PersistentClient(path=str(chroma_dir()), settings=Settings(anonymized_telemetry=False))
+
+
 @lru_cache(maxsize=1)
 def get_collection():
-    import chromadb
-
-    client = chromadb.PersistentClient(path=str(chroma_dir()))
-    return client.get_or_create_collection(COLLECTION, metadata={"hnsw:space": "cosine"})
+    return _client().get_or_create_collection(COLLECTION, metadata={"hnsw:space": "cosine"})
 
 
 def build_index(pois: list[POI]) -> int:
     """(Re)build the collection from scratch. Returns number of indexed POIs."""
-    import chromadb
-
-    client = chromadb.PersistentClient(path=str(chroma_dir()))
+    client = _client()
     try:
         client.delete_collection(COLLECTION)
     except Exception:  # collection may not exist yet
