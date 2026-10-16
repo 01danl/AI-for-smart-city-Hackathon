@@ -4,6 +4,11 @@ Supports the common subset of the OSM syntax: `24/7`, rules separated by `;`,
 weekday ranges/lists (`Mo-Fr`, `Sa,Su`), multiple time ranges (`10:00-14:00,15:00-19:00`),
 overnight ranges (`18:00-02:00`) and `off`. Anything else yields `unknown`:
 we never claim a place is open without data we can actually interpret.
+
+Senior extensions:
+- `check_visit_window()`: verifies if a POI remains open for the full duration of
+  walking (`walk_min`) + visiting (`visit_min`), returning remaining minutes until closing.
+- `is_late_night()`: identifies nighttime queries (22:00–05:59 Astana UTC+5) for safety rules.
 """
 
 from __future__ import annotations
@@ -35,6 +40,12 @@ def resolve_now(now_iso: str | None) -> datetime:
     if dt.tzinfo is None:
         dt = dt.replace(tzinfo=ASTANA_TZ)
     return dt.astimezone(ASTANA_TZ)
+
+
+def is_late_night(now_iso: str | None = None) -> bool:
+    """Return True if the target time in Astana is between 22:00 and 05:59."""
+    now = resolve_now(now_iso)
+    return now.hour >= 22 or now.hour < 6
 
 
 def _parse_days(spec: str) -> set[int]:
@@ -147,3 +158,51 @@ def open_status(hours: str | None, now_iso: str | None = None) -> tuple[OpenStat
 
     # In OSM syntax, days not listed are closed.
     return "likely_closed", f"Сейчас вне часов работы по данным OSM ({hours})"
+
+
+def check_visit_window(
+    hours: str | None,
+    now_iso: str | None = None,
+    walk_min: int = 0,
+    visit_min: int = 45,
+) -> tuple[OpenStatus, str, int | None]:
+    """Check if the POI stays open during walk_min + visit_min.
+
+    Returns (adjusted_status, detailed_reason, minutes_until_close).
+    """
+    base_status, base_reason = open_status(hours, now_iso)
+    if base_status in ("unknown", "likely_closed") or not hours:
+        return base_status, base_reason, None
+
+    try:
+        schedule = _parse(hours.strip())
+    except (_Unparseable, ValueError):
+        return base_status, base_reason, None
+
+    now = resolve_now(now_iso)
+    minute = now.hour * 60 + now.minute
+    today, yesterday = now.weekday(), (now.weekday() - 1) % 7
+    candidates = [(s, e) for s, e in schedule.get(today, [])]
+    candidates += [(s - 1440, e - 1440) for s, e in schedule.get(yesterday, []) if e > 1440]
+
+    for start, end in candidates:
+        if start <= minute < end:
+            if end - start >= 1440:
+                return "confirmed_open", base_reason, None
+            left = end - minute
+            total_needed = walk_min + visit_min
+            if left < walk_min + 10:
+                return (
+                    "likely_open",
+                    f"Внимание: до закрытия {left} мин, а пешком идти ~{walk_min} мин ({hours})",
+                    left,
+                )
+            if left < total_needed:
+                return (
+                    "likely_open",
+                    f"Открыто, но закроется через {left} мин (на дорогу и визит нужно ~{total_needed} мин, {hours})",
+                    left,
+                )
+            return base_status, base_reason, left
+
+    return base_status, base_reason, None

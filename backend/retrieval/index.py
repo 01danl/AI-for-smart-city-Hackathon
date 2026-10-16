@@ -35,10 +35,17 @@ def index_exists() -> bool:
     return (chroma_dir() / "chroma.sqlite3").exists()
 
 
+def _parse_poi(data: dict) -> POI:
+    validator = getattr(POI, "model_validate", None)
+    if validator is not None:
+        return validator(data)
+    return POI.parse_obj(data)
+
+
 @lru_cache(maxsize=1)
 def load_pois() -> dict[str, POI]:
     raw = json.loads(poi_data_path().read_text(encoding="utf-8"))
-    return {p["id"]: POI.model_validate(p) for p in raw}
+    return {p["id"]: _parse_poi(p) for p in raw}
 
 
 @lru_cache(maxsize=1)

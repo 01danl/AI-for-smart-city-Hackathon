@@ -1,14 +1,17 @@
 """Retrieval-level checks for the scenarios in docs/test_scenarios.md.
 
-Runs against the real Chroma index; skipped if it hasn't been built
-(python scripts/build_index.py).
+Runs against the real Chroma index if built, or the hybrid BM25 retriever over
+all 966 POIs in data/poi.json when Chroma hasn't been built yet.
 """
 
 import pytest
 
-from backend.retrieval.index import index_exists
+from backend.retrieval.index import index_exists, poi_data_path
 
-pytestmark = pytest.mark.skipif(not index_exists(), reason="Chroma index not built")
+pytestmark = pytest.mark.skipif(
+    not (index_exists() or poi_data_path().exists()),
+    reason="Neither Chroma index nor data/poi.json is available",
+)
 
 BAITEREK = (51.1283, 71.4305)
 OUTSIDE_CITY = (51.30, 71.00)
@@ -16,9 +19,11 @@ OUTSIDE_CITY = (51.30, 71.00)
 
 @pytest.fixture(scope="module")
 def retrieve():
-    from backend.retrieval.chroma_retriever import retrieve
-
-    return retrieve
+    if index_exists():
+        from backend.retrieval.chroma_retriever import retrieve as _ret
+    else:
+        from backend.retrieval.hybrid_bm25 import retrieve as _ret
+    return _ret
 
 
 def test_s1_laptop_cafe(retrieve):
