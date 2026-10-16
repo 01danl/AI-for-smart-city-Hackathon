@@ -31,6 +31,8 @@ CATEGORY_WORDS: dict[str, str] = {
     "gallery": "галерея искусство выставка gallery art",
     "theme_park": "парк развлечений аттракционы дети theme park",
     "zoo": "зоопарк животные дети zoo",
+    "stadium": "стадион арена матч футбол хоккей концерт stadium arena",
+    "exhibition": "выставочный центр выставка экспо exhibition expo",
 }
 
 TAG_WORDS: dict[str, str] = {
@@ -47,6 +49,8 @@ TAG_WORDS: dict[str, str] = {
     "indoor": "в помещении",
     "outdoor": "на открытом воздухе",
     "culture": "культура",
+    "landmark": "известная достопримечательность символ города что посмотреть туристу must-see landmark",
+    "events": "мероприятия события",
     "muslim": "мечеть ислам",
     "christian": "церковь храм",
     "cuisine_coffee_shop": "кофейня кофе",

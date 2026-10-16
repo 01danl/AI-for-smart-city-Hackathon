@@ -47,6 +47,7 @@ CATEGORY_MAP: dict[str, dict[str, str]] = {
         "bar": "bar", "pub": "bar", "ice_cream": "cafe", "theatre": "theatre",
         "cinema": "cinema", "library": "library", "arts_centre": "arts_centre",
         "place_of_worship": "place_of_worship", "fountain": "attraction",
+        "exhibition_centre": "exhibition", "planetarium": "museum",
     },
     "tourism": {
         "museum": "museum", "gallery": "gallery", "attraction": "attraction",
@@ -56,9 +57,21 @@ CATEGORY_MAP: dict[str, dict[str, str]] = {
     "leisure": {
         "park": "park", "garden": "park", "water_park": "theme_park",
         "ice_rink": "sport", "sports_centre": "sport", "fitness_centre": "sport",
+        "stadium": "stadium",
     },
     "shop": {"mall": "mall", "books": "bookstore"},
     "historic": {"monument": "monument", "memorial": "monument"},
+}
+
+# Generic tags that are only worth collecting for notable objects (with a `wikidata` link):
+# e.g. the Palace of Peace and Reconciliation is tagged just amenity=community_centre.
+NOTABLE_ONLY_MAP: dict[str, dict[str, str]] = {
+    "amenity": {"community_centre": "attraction"},
+}
+
+# Russian names for landmarks that only have a Kazakh `name` in OSM.
+NAME_OVERRIDES: dict[str, str] = {
+    "way/166197368": "Дворец мира и согласия",
 }
 
 FOOD_CATEGORIES = {"cafe", "restaurant", "fast_food", "bar"}
@@ -75,6 +88,9 @@ def build_query(bbox: tuple[float, float, float, float], timeout: int = 180) -> 
     for key, values in CATEGORY_MAP.items():
         regex = "|".join(sorted(values))
         selectors.append(f'nwr["{key}"~"^({regex})$"]["name"]({s},{w},{n},{e});')
+    for key, values in NOTABLE_ONLY_MAP.items():
+        regex = "|".join(sorted(values))
+        selectors.append(f'nwr["{key}"~"^({regex})$"]["name"]["wikidata"]({s},{w},{n},{e});')
     body = "\n  ".join(selectors)
     return f"[out:json][timeout:{timeout}];\n(\n  {body}\n);\nout center tags;"
 
@@ -87,13 +103,13 @@ def fetch_overpass(query: str, retries: int = 3) -> dict:
             try:
                 print(f"[overpass] {url} (attempt {attempt + 1})", file=sys.stderr)
                 r = requests.post(url, data={"data": query}, headers=headers, timeout=240)
-                if r.status_code in (429, 504):
+                if r.status_code in (429, 502, 503, 504):
                     raise requests.HTTPError(f"HTTP {r.status_code}")
                 r.raise_for_status()
                 return r.json()
             except (requests.RequestException, ValueError) as err:
                 last_err = err
-                time.sleep(5 * (attempt + 1))
+                time.sleep(10 * 2 ** attempt)  # servers are often at capacity
     raise RuntimeError(f"All Overpass endpoints failed: {last_err}")
 
 
@@ -101,6 +117,10 @@ def _category(tags: dict[str, str]) -> str | None:
     for key, values in CATEGORY_MAP.items():
         if tags.get(key) in values:
             return values[tags[key]]
+    if tags.get("wikidata"):
+        for key, values in NOTABLE_ONLY_MAP.items():
+            if tags.get(key) in values:
+                return values[tags[key]]
     return None
 
 
@@ -150,12 +170,16 @@ def _derived_tags(tags: dict[str, str], category: str) -> list[str]:
         out.add("culture")
     if tags.get("religion"):
         out.add(tags["religion"])
+    if tags.get("wikidata") or tags.get("wikipedia"):
+        out.add("landmark")
+    if category in {"stadium", "exhibition"}:
+        out.add("events")
     return sorted(out)
 
 
 def normalize(element: dict, collected_at: str) -> POI | None:
     tags = element.get("tags", {})
-    name = _name(tags)
+    name = NAME_OVERRIDES.get(f"{element['type']}/{element['id']}") or _name(tags)
     category = _category(tags)
     if not name or not category or ADDRESS_NAME_RE.search(name):
         return None
