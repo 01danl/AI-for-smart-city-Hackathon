@@ -63,7 +63,7 @@ RAG-система, которая в реальном времени совет
 - Документ по этике и приватности: `docs/ethics_privacy.md`.
 
 **Роль B: генерация и интерфейс** (ветка `feat/generation-ui`, папки `backend/generation/`, `backend/api/`, `frontend/`)
-- Промпт и вызов Claude: «почему / время / что делать», маркировка источника.
+- Промпт и вызов модели через OpenRouter: «почему / время / что делать», маркировка источника.
 - FastAPI `/recommend`, мини-маршрут из 3 мест.
 - UI (Streamlit или Gradio): ввод локации, фильтры, карточки рекомендаций.
 - README, описание RAG-подхода, презентация, запись демо.
@@ -131,9 +131,9 @@ def retrieve(query: str, lat: float, lon: float, *,
 ## Технологии
 
 - Python 3.11+, FastAPI, Streamlit (или Gradio), Chroma.
-- LLM: Claude через Anthropic API. Модель задаётся переменной `ANTHROPIC_MODEL`
-  (по умолчанию `claude-sonnet-5-5`, для быстрых тестов `claude-haiku-5-5`).
-- Эмбеддинги: у Anthropic API нет эмбеддингов, используем локальную мультиязычную модель
+- LLM: OpenRouter через OpenAI-совместимый клиент с `OPENROUTER_BASE_URL`.
+  Ключ и модель задаются `OPENROUTER_API_KEY` и `OPENROUTER_MODEL`.
+- Эмбеддинги считаются локальной мультиязычной моделью
   `sentence-transformers` (ru/kk/en).
 - Ключи только в `.env` (в `.gitignore`), в репо лежит `.env.example`.
 
@@ -143,7 +143,7 @@ def retrieve(query: str, lat: float, lon: float, *,
 data/            # сбор и готовый датасет POI
 backend/
   retrieval/     # индекс, retrieve(), stub.py
-  generation/    # промпты, вызов Claude
+  generation/    # промпты, вызов модели через OpenRouter
   api/           # FastAPI
 frontend/        # UI демо
 docs/            # concept.md, rag_approach.md, test_scenarios.md, ethics_privacy.md
