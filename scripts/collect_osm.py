@@ -261,6 +261,8 @@ def main() -> None:
     args = parser.parse_args()
 
     if args.from_raw:
+        if not RAW_PATH.exists():
+            sys.exit(f"{RAW_PATH.relative_to(ROOT)} not found: run without --from-raw first")
         raw = json.loads(RAW_PATH.read_text(encoding="utf-8"))
     else:
         raw = fetch_overpass(build_query(ASTANA_BBOX))

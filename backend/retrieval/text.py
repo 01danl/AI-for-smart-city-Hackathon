@@ -112,8 +112,8 @@ def poi_document(poi: POI) -> str:
 QUERY_TAG_HINTS: dict[str, list[str]] = {
     "розет": ["wifi"], "ноутбук": ["wifi"], "поработ": ["wifi"], "wi-fi": ["wifi"],
     "wifi": ["wifi"], "вайфай": ["wifi"], "интернет": ["wifi"], "laptop": ["wifi"],
-    "work": ["wifi"], "коляс": ["wheelchair"],
-    "маломобил": ["wheelchair"], "инвалид": ["wheelchair"], "доступн": ["wheelchair"],
+    "work": ["wifi"], "коляс": ["wheelchair"],  # also baby strollers: same step-free need
+    "маломобил": ["wheelchair"], "инвалид": ["wheelchair"], "безбарьер": ["wheelchair"],
     "wheelchair": ["wheelchair"], "accessible": ["wheelchair"], "терас": ["terrace"],
     "на улице": ["terrace", "outdoor"], "outdoor": ["terrace", "outdoor"],
     "халял": ["halal"], "halal": ["halal"], "вегет": ["vegetarian"], "vegan": ["vegetarian"],
@@ -123,7 +123,7 @@ QUERY_TAG_HINTS: dict[str, list[str]] = {
     "казахск": ["cuisine_kazakh", "cuisine_regional"], "бешбармак": ["cuisine_kazakh", "cuisine_regional"],
     "завтрак": ["cuisine_breakfast", "cuisine_brunch"], "пицц": ["cuisine_pizza"],
     "суши": ["cuisine_sushi", "cuisine_japanese"], "бургер": ["cuisine_burger"],
-    "посмотреть": ["landmark"], "достопримечат": ["landmark"], "турист": ["landmark"],
+    "что посмотреть": ["landmark"], "достопримечат": ["landmark"], "турист": ["landmark"],
     "символ": ["landmark"], "знаменит": ["landmark"], "известн": ["landmark"],
     "sightseeing": ["landmark"], "landmark": ["landmark"], "must-see": ["landmark"],
     "футбол": ["stadium", "events"], "хоккей": ["stadium", "events"], "матч": ["stadium", "events"],
