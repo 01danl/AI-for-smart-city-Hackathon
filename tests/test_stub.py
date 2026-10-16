@@ -22,3 +22,17 @@ def test_missing_hours_is_unknown():
     res = retrieve("парк", *BAITEREK, max_distance_m=5000, categories=["park"], top_k=10)
     lovers = next(c for c in res if c.poi.id == "stub_lovers_park")
     assert lovers.open_status == "unknown"
+
+
+def test_get_poi_stub(monkeypatch):
+    import importlib
+
+    import backend.retrieval as r
+
+    monkeypatch.setenv("RETRIEVAL_BACKEND", "stub")
+    r = importlib.reload(r)
+    assert r.get_poi("stub_baiterek").name == "Монумент Байтерек"
+    assert r.get_poi("osm_node_does_not_exist") is None
+    r.warmup()
+    monkeypatch.delenv("RETRIEVAL_BACKEND")
+    importlib.reload(r)
