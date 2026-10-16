@@ -77,3 +77,18 @@ def test_invariants(retrieve):
         assert c.walk_min >= 1
         if c.poi.opening_hours is None:
             assert c.open_status == "unknown"
+
+
+def test_s10_tourist_landmarks(retrieve):
+    res = retrieve("что посмотреть туристу", *BAITEREK, max_distance_m=4000, top_k=5)
+    assert sum("landmark" in c.poi.tags for c in res) >= 3
+
+
+def test_s11_football_stadium(retrieve):
+    res = retrieve("сходить на футбол", *BAITEREK, max_distance_m=6000, top_k=5)
+    assert all(c.poi.category == "stadium" for c in res[:2])
+
+
+def test_wifi_cafes_first_for_laptop_query(retrieve):
+    res = retrieve("тихое место с кофе и розеткой", *BAITEREK, now_iso="2026-10-16T13:00", top_k=5)
+    assert "wifi" in res[0].poi.tags

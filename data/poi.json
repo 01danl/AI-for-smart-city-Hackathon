@@ -10053,6 +10053,7 @@
   "tags": [
    "culture",
    "indoor",
+   "landmark",
    "museum"
   ],
   "opening_hours": null,
@@ -10133,6 +10134,7 @@
   "category": "place_of_worship",
   "tags": [
    "jewish",
+   "landmark",
    "place_of_worship"
   ],
   "opening_hours": null,
@@ -16198,6 +16200,7 @@
   "description": null,
   "category": "place_of_worship",
   "tags": [
+   "landmark",
    "muslim",
    "place_of_worship"
   ],
@@ -16519,6 +16522,7 @@
   "description": null,
   "category": "park",
   "tags": [
+   "landmark",
    "outdoor",
    "park"
   ],
@@ -17546,6 +17550,27 @@
   "collected_at": "2026-10-16"
  },
  {
+  "id": "osm_way_1460088073",
+  "name": "Астана Арена",
+  "lat": 51.108168,
+  "lon": 71.40278,
+  "description": null,
+  "category": "stadium",
+  "tags": [
+   "events",
+   "landmark",
+   "stadium"
+  ],
+  "opening_hours": null,
+  "contacts": {
+   "phone": "+7 7172 702663",
+   "website": "https://astanaarena.kz/"
+  },
+  "rating": null,
+  "source": "osm",
+  "collected_at": "2026-10-16"
+ },
+ {
   "id": "osm_way_1460537088",
   "name": "Astana Musical",
   "lat": 51.122753,
@@ -17555,6 +17580,7 @@
   "tags": [
    "culture",
    "indoor",
+   "landmark",
    "theatre"
   ],
   "opening_hours": null,
@@ -17576,6 +17602,7 @@
   "tags": [
    "culture",
    "indoor",
+   "landmark",
    "museum"
   ],
   "opening_hours": null,
@@ -17786,6 +17813,26 @@
   "collected_at": "2026-10-16"
  },
  {
+  "id": "osm_way_166197368",
+  "name": "Дворец мира и согласия",
+  "lat": 51.123123,
+  "lon": 71.463456,
+  "description": "62 x 62 m , 77m hight, 15m base underfloor",
+  "category": "attraction",
+  "tags": [
+   "community_centre",
+   "landmark"
+  ],
+  "opening_hours": null,
+  "contacts": {
+   "phone": null,
+   "website": "https://astana-piramida.kz/"
+  },
+  "rating": null,
+  "source": "osm",
+  "collected_at": "2026-10-16"
+ },
+ {
   "id": "osm_way_166265821",
   "name": "Сарыарка",
   "lat": 51.110037,
@@ -17793,6 +17840,7 @@
   "description": null,
   "category": "sport",
   "tags": [
+   "landmark",
    "sports_centre"
   ],
   "opening_hours": null,
@@ -17812,6 +17860,7 @@
   "description": null,
   "category": "sport",
   "tags": [
+   "landmark",
    "sports_centre"
   ],
   "opening_hours": null,
@@ -17974,8 +18023,49 @@
   "category": "monument",
   "tags": [
    "culture",
+   "landmark",
    "monument",
    "outdoor"
+  ],
+  "opening_hours": null,
+  "contacts": {
+   "phone": null,
+   "website": null
+  },
+  "rating": null,
+  "source": "osm",
+  "collected_at": "2026-10-16"
+ },
+ {
+  "id": "osm_way_230459255",
+  "name": "Локомотив стадионы",
+  "lat": 51.191829,
+  "lon": 71.398325,
+  "description": null,
+  "category": "stadium",
+  "tags": [
+   "events",
+   "stadium"
+  ],
+  "opening_hours": null,
+  "contacts": {
+   "phone": null,
+   "website": null
+  },
+  "rating": null,
+  "source": "osm",
+  "collected_at": "2026-10-16"
+ },
+ {
+  "id": "osm_way_236528223",
+  "name": "Динамо",
+  "lat": 51.187935,
+  "lon": 71.404099,
+  "description": null,
+  "category": "stadium",
+  "tags": [
+   "events",
+   "stadium"
   ],
   "opening_hours": null,
   "contacts": {
@@ -18277,8 +18367,29 @@
   "description": null,
   "category": "place_of_worship",
   "tags": [
+   "landmark",
    "muslim",
    "place_of_worship"
+  ],
+  "opening_hours": null,
+  "contacts": {
+   "phone": null,
+   "website": null
+  },
+  "rating": null,
+  "source": "osm",
+  "collected_at": "2026-10-16"
+ },
+ {
+  "id": "osm_way_240873345",
+  "name": "Дворец Независимости",
+  "lat": 51.120631,
+  "lon": 71.472049,
+  "description": null,
+  "category": "attraction",
+  "tags": [
+   "community_centre",
+   "landmark"
   ],
   "opening_hours": null,
   "contacts": {
@@ -18690,6 +18801,26 @@
   "contacts": {
    "phone": null,
    "website": "https://www.fairplay.kz/"
+  },
+  "rating": null,
+  "source": "osm",
+  "collected_at": "2026-10-16"
+ },
+ {
+  "id": "osm_way_242364773",
+  "name": "Национальный теннисный центр «Даулет»",
+  "lat": 51.153335,
+  "lon": 71.419312,
+  "description": null,
+  "category": "stadium",
+  "tags": [
+   "events",
+   "stadium"
+  ],
+  "opening_hours": null,
+  "contacts": {
+   "phone": null,
+   "website": null
   },
   "rating": null,
   "source": "osm",
@@ -19222,6 +19353,26 @@
   "collected_at": "2026-10-16"
  },
  {
+  "id": "osm_way_454853233",
+  "name": "EXPO",
+  "lat": 51.092788,
+  "lon": 71.421482,
+  "description": null,
+  "category": "exhibition",
+  "tags": [
+   "events",
+   "exhibition_centre"
+  ],
+  "opening_hours": null,
+  "contacts": {
+   "phone": null,
+   "website": null
+  },
+  "rating": null,
+  "source": "osm",
+  "collected_at": "2026-10-16"
+ },
+ {
   "id": "osm_way_460048101",
   "name": "Ледовая арена",
   "lat": 51.110307,
@@ -19249,6 +19400,7 @@
   "category": "mall",
   "tags": [
    "indoor",
+   "landmark",
    "mall",
    "wheelchair"
   ],
@@ -19535,6 +19687,7 @@
   "category": "attraction",
   "tags": [
    "attraction",
+   "landmark",
    "monument"
   ],
   "opening_hours": null,
@@ -19687,6 +19840,27 @@
   "collected_at": "2026-10-16"
  },
  {
+  "id": "osm_way_663143306",
+  "name": "Барыс Арена",
+  "lat": 51.109247,
+  "lon": 71.394631,
+  "description": null,
+  "category": "stadium",
+  "tags": [
+   "events",
+   "landmark",
+   "stadium"
+  ],
+  "opening_hours": null,
+  "contacts": {
+   "phone": null,
+   "website": "https://hcbarys.kz/"
+  },
+  "rating": null,
+  "source": "osm",
+  "collected_at": "2026-10-16"
+ },
+ {
   "id": "osm_way_684508282",
   "name": "Памятник Великой Отечественной Войне",
   "lat": 51.124771,
@@ -19734,6 +19908,7 @@
   "description": null,
   "category": "park",
   "tags": [
+   "landmark",
    "outdoor",
    "park"
   ],
@@ -19795,6 +19970,7 @@
   "category": "mall",
   "tags": [
    "indoor",
+   "landmark",
    "mall"
   ],
   "opening_hours": "Mo-Su 10:00-22:00",
@@ -19917,6 +20093,7 @@
   "tags": [
    "culture",
    "indoor",
+   "landmark",
    "theatre"
   ],
   "opening_hours": null,

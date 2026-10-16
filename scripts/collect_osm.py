@@ -69,9 +69,14 @@ NOTABLE_ONLY_MAP: dict[str, dict[str, str]] = {
     "amenity": {"community_centre": "attraction"},
 }
 
-# Russian names for landmarks that only have a Kazakh `name` in OSM.
+# Point fixes for OSM errors found while checking the data (keyed by "type/id").
+# Russian names for landmarks that only have a Kazakh `name`, or a wrong `name:ru`.
 NAME_OVERRIDES: dict[str, str] = {
     "way/166197368": "Дворец мира и согласия",
+    "way/242364773": "Национальный теннисный центр «Даулет»",  # name:ru says "Атамекен"
+}
+EXCLUDE_IDS: set[str] = {
+    "way/1101744445",  # "Stade Game of Thrones": joke name on a school sports ground
 }
 
 FOOD_CATEGORIES = {"cafe", "restaurant", "fast_food", "bar"}
@@ -177,7 +182,22 @@ def _derived_tags(tags: dict[str, str], category: str) -> list[str]:
     return sorted(out)
 
 
+def dedupe_by_wikidata(elements: list[dict]) -> list[dict]:
+    """Keep one element per wikidata id (OSM often has a node and a building for a landmark)."""
+    best: dict[str, dict] = {}
+    rest: list[dict] = []
+    for e in elements:
+        qid = e.get("tags", {}).get("wikidata")
+        if not qid:
+            rest.append(e)
+        elif qid not in best or len(e["tags"]) > len(best[qid]["tags"]):
+            best[qid] = e
+    return rest + list(best.values())
+
+
 def normalize(element: dict, collected_at: str) -> POI | None:
+    if f"{element['type']}/{element['id']}" in EXCLUDE_IDS:
+        return None
     tags = element.get("tags", {})
     name = NAME_OVERRIDES.get(f"{element['type']}/{element['id']}") or _name(tags)
     category = _category(tags)
@@ -249,7 +269,7 @@ def main() -> None:
 
     collected_at = raw.get("osm3s", {}).get("timestamp_osm_base", "")[:10] or date.today().isoformat()
     elements = raw.get("elements", [])
-    pois = [p for p in (normalize(e, collected_at) for e in elements) if p]
+    pois = [p for p in (normalize(e, collected_at) for e in dedupe_by_wikidata(elements)) if p]
     pois = sorted(deduplicate(pois), key=lambda p: p.id)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)

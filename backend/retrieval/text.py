@@ -123,6 +123,11 @@ QUERY_TAG_HINTS: dict[str, list[str]] = {
     "казахск": ["cuisine_kazakh", "cuisine_regional"], "бешбармак": ["cuisine_kazakh", "cuisine_regional"],
     "завтрак": ["cuisine_breakfast", "cuisine_brunch"], "пицц": ["cuisine_pizza"],
     "суши": ["cuisine_sushi", "cuisine_japanese"], "бургер": ["cuisine_burger"],
+    "посмотреть": ["landmark"], "достопримечат": ["landmark"], "турист": ["landmark"],
+    "символ": ["landmark"], "знаменит": ["landmark"], "известн": ["landmark"],
+    "sightseeing": ["landmark"], "landmark": ["landmark"], "must-see": ["landmark"],
+    "футбол": ["stadium", "events"], "хоккей": ["stadium", "events"], "матч": ["stadium", "events"],
+    "стадион": ["stadium"], "выставк": ["exhibition_centre", "gallery", "museum"],
 }
 
 
