@@ -1,4 +1,5 @@
-from backend.retrieval import Candidate, retrieve
+from backend.retrieval import Candidate
+from backend.retrieval.stub import retrieve
 
 BAITEREK = (51.1283, 71.4305)
 
