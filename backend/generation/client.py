@@ -12,6 +12,7 @@ from dotenv import load_dotenv
 
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
+load_dotenv(ROOT / ".env")
 
 try:
     from openai import OpenAI  # type: ignore[import-not-found]

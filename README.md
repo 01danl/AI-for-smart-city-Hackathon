@@ -57,10 +57,11 @@ cp .env.example .env
 
 ### 2. (Опционально) Сбор данных из OSM и сборка векторного индекса Chroma
 
-В репозитории уже лежит готовый датасет `data/poi.json` (966 POI). Чтобы пересобрать индекс Chroma:
+В репозитории уже лежит готовый датасет `data/poi.json` (966 POI). Без индекса
+приложение использует поиск BM25 по этим данным. Чтобы пересобрать индекс Chroma:
 
 ```bash
-python scripts/collect_osm.py --from-raw   # или без флага для свежего запроса в Overpass API
+python scripts/collect_osm.py              # необязательно: свежий запрос в Overpass API
 python scripts/build_index.py              # строит векторный индекс в data/chroma/
 ```
 
