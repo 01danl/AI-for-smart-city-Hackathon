@@ -3,7 +3,8 @@
 relevance = cosine similarity rescaled to 0-1 (MiniLM: good matches ~0.4-0.8, unrelated
 ~0.0-0.2), plus a lexical boost when the query asks for an amenity the POI is tagged with
 (wi-fi, wheelchair access, halal, ...). Embeddings alone blur such hard requirements.
-Ranking score = 0.65 * relevance + 0.25 * proximity + hours adjustment.
+Ranking score = 0.65 * relevance + 0.25 * proximity + hours adjustment
+              + HINT_BONUS if the POI has any tag the query explicitly asked for.
 """
 
 from __future__ import annotations
@@ -20,9 +21,10 @@ W_RELEVANCE = 0.65
 W_PROXIMITY = 0.25
 HOURS_ADJUST = {"confirmed_open": 0.10, "likely_open": 0.05, "unknown": 0.0, "likely_closed": -0.30}
 SIM_FLOOR, SIM_CEIL = 0.15, 0.85
-TAG_BOOST = 0.15  # per matched hinted tag, capped at 2 tags
+TAG_BOOST = 0.15  # added to relevance per matched hinted tag, capped at 2 tags
+HINT_BONUS = 0.15  # explicit requirements (wi-fi, stadium, landmark...) beat vague similarity
 MIN_RELEVANCE = 0.05  # drop clearly unrelated POIs instead of padding the list
-MAX_POOL = 300
+MAX_POOL = 5000  # dataset is ~1k POIs: score everything in the bbox so tag boosts can apply
 
 
 def _rescale(sim: float) -> float:
@@ -73,6 +75,8 @@ def retrieve(query: str, lat: float, lon: float, *,
         status, reason = open_status(poi.opening_hours, now_iso)
         proximity = 1 - dist / max_distance_m
         score = W_RELEVANCE * rel + W_PROXIMITY * proximity + HOURS_ADJUST[status]
+        if matched:
+            score += HINT_BONUS
         scored.append((score, Candidate(
             poi=poi,
             distance_m=round(dist),

@@ -33,7 +33,26 @@ BACKEND = _select_backend()
 
 if BACKEND == "chroma":
     from .chroma_retriever import retrieve
+    from .index import load_pois as _load_pois
 else:
+    from .stub import STUB_POIS as _STUB_POIS
     from .stub import retrieve
 
-__all__ = ["BACKEND", "POI", "Candidate", "OpenStatus", "retrieve"]
+    def _load_pois() -> dict[str, POI]:
+        return {p.id: p for p in _STUB_POIS}
+
+
+def get_poi(poi_id: str) -> POI | None:
+    """Look up a POI by id, e.g. to verify the LLM only returned ids from retrieval results."""
+    return _load_pois().get(poi_id)
+
+
+def warmup() -> None:
+    """Load the embedding model and index up front (first query is otherwise ~10 s slower).
+
+    Call once at API/UI startup.
+    """
+    retrieve("прогулка", 51.1283, 71.4305, top_k=1)
+
+
+__all__ = ["BACKEND", "POI", "Candidate", "OpenStatus", "get_poi", "retrieve", "warmup"]

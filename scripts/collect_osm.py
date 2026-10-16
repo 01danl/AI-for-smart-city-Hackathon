@@ -47,6 +47,7 @@ CATEGORY_MAP: dict[str, dict[str, str]] = {
         "bar": "bar", "pub": "bar", "ice_cream": "cafe", "theatre": "theatre",
         "cinema": "cinema", "library": "library", "arts_centre": "arts_centre",
         "place_of_worship": "place_of_worship", "fountain": "attraction",
+        "exhibition_centre": "exhibition", "planetarium": "museum",
     },
     "tourism": {
         "museum": "museum", "gallery": "gallery", "attraction": "attraction",
@@ -56,9 +57,26 @@ CATEGORY_MAP: dict[str, dict[str, str]] = {
     "leisure": {
         "park": "park", "garden": "park", "water_park": "theme_park",
         "ice_rink": "sport", "sports_centre": "sport", "fitness_centre": "sport",
+        "stadium": "stadium",
     },
     "shop": {"mall": "mall", "books": "bookstore"},
     "historic": {"monument": "monument", "memorial": "monument"},
+}
+
+# Generic tags that are only worth collecting for notable objects (with a `wikidata` link):
+# e.g. the Palace of Peace and Reconciliation is tagged just amenity=community_centre.
+NOTABLE_ONLY_MAP: dict[str, dict[str, str]] = {
+    "amenity": {"community_centre": "attraction"},
+}
+
+# Point fixes for OSM errors found while checking the data (keyed by "type/id").
+# Russian names for landmarks that only have a Kazakh `name`, or a wrong `name:ru`.
+NAME_OVERRIDES: dict[str, str] = {
+    "way/166197368": "Дворец мира и согласия",
+    "way/242364773": "Национальный теннисный центр «Даулет»",  # name:ru says "Атамекен"
+}
+EXCLUDE_IDS: set[str] = {
+    "way/1101744445",  # "Stade Game of Thrones": joke name on a school sports ground
 }
 
 FOOD_CATEGORIES = {"cafe", "restaurant", "fast_food", "bar"}
@@ -75,6 +93,9 @@ def build_query(bbox: tuple[float, float, float, float], timeout: int = 180) -> 
     for key, values in CATEGORY_MAP.items():
         regex = "|".join(sorted(values))
         selectors.append(f'nwr["{key}"~"^({regex})$"]["name"]({s},{w},{n},{e});')
+    for key, values in NOTABLE_ONLY_MAP.items():
+        regex = "|".join(sorted(values))
+        selectors.append(f'nwr["{key}"~"^({regex})$"]["name"]["wikidata"]({s},{w},{n},{e});')
     body = "\n  ".join(selectors)
     return f"[out:json][timeout:{timeout}];\n(\n  {body}\n);\nout center tags;"
 
@@ -87,13 +108,13 @@ def fetch_overpass(query: str, retries: int = 3) -> dict:
             try:
                 print(f"[overpass] {url} (attempt {attempt + 1})", file=sys.stderr)
                 r = requests.post(url, data={"data": query}, headers=headers, timeout=240)
-                if r.status_code in (429, 504):
+                if r.status_code in (429, 502, 503, 504):
                     raise requests.HTTPError(f"HTTP {r.status_code}")
                 r.raise_for_status()
                 return r.json()
             except (requests.RequestException, ValueError) as err:
                 last_err = err
-                time.sleep(5 * (attempt + 1))
+                time.sleep(10 * 2 ** attempt)  # servers are often at capacity
     raise RuntimeError(f"All Overpass endpoints failed: {last_err}")
 
 
@@ -101,6 +122,10 @@ def _category(tags: dict[str, str]) -> str | None:
     for key, values in CATEGORY_MAP.items():
         if tags.get(key) in values:
             return values[tags[key]]
+    if tags.get("wikidata"):
+        for key, values in NOTABLE_ONLY_MAP.items():
+            if tags.get(key) in values:
+                return values[tags[key]]
     return None
 
 
@@ -150,12 +175,31 @@ def _derived_tags(tags: dict[str, str], category: str) -> list[str]:
         out.add("culture")
     if tags.get("religion"):
         out.add(tags["religion"])
+    if tags.get("wikidata") or tags.get("wikipedia"):
+        out.add("landmark")
+    if category in {"stadium", "exhibition"}:
+        out.add("events")
     return sorted(out)
 
 
+def dedupe_by_wikidata(elements: list[dict]) -> list[dict]:
+    """Keep one element per wikidata id (OSM often has a node and a building for a landmark)."""
+    best: dict[str, dict] = {}
+    rest: list[dict] = []
+    for e in elements:
+        qid = e.get("tags", {}).get("wikidata")
+        if not qid:
+            rest.append(e)
+        elif qid not in best or len(e["tags"]) > len(best[qid]["tags"]):
+            best[qid] = e
+    return rest + list(best.values())
+
+
 def normalize(element: dict, collected_at: str) -> POI | None:
+    if f"{element['type']}/{element['id']}" in EXCLUDE_IDS:
+        return None
     tags = element.get("tags", {})
-    name = _name(tags)
+    name = NAME_OVERRIDES.get(f"{element['type']}/{element['id']}") or _name(tags)
     category = _category(tags)
     if not name or not category or ADDRESS_NAME_RE.search(name):
         return None
@@ -225,7 +269,7 @@ def main() -> None:
 
     collected_at = raw.get("osm3s", {}).get("timestamp_osm_base", "")[:10] or date.today().isoformat()
     elements = raw.get("elements", [])
-    pois = [p for p in (normalize(e, collected_at) for e in elements) if p]
+    pois = [p for p in (normalize(e, collected_at) for e in dedupe_by_wikidata(elements)) if p]
     pois = sorted(deduplicate(pois), key=lambda p: p.id)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
