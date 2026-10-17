@@ -1,8 +1,8 @@
 """Streamlit demo UI for Astana Walk AI (Build with AI · Smart City Track).
 
 ChatGPT-style layout: left sidebar with "Новый чат", scenario shortcuts and a
-revisitable conversation history; the chat itself on the right, walk settings
-collapsed at the bottom of the sidebar.
+revisitable conversation history; the chat in the middle; a settings drawer on
+the right, opened from the gear in the chat header's top-right corner.
 
 Launch with:
     streamlit run frontend/app.py
@@ -129,9 +129,29 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .block-container {{ padding: 1rem 1.2rem 1rem; max-width: 1480px; }}
 
 /* Panels */
-.st-key-side, .st-key-chat {{ background: {PANEL}; border: 1px solid {LINE}; border-radius: 18px; }}
-.st-key-side {{ min-height: calc(100dvh - 32px); padding: 16px 14px 14px !important; }}
+.st-key-side, .st-key-settings, .st-key-chat {{ background: {PANEL}; border: 1px solid {LINE};
+                                                border-radius: 18px; }}
+.st-key-side, .st-key-settings {{ min-height: calc(100dvh - 32px); padding: 16px 14px 14px !important;
+                                  overflow-y: auto; }}
 .st-key-chat {{ background: {PAGE}; padding: 0 0 12px 0 !important; min-height: calc(100dvh - 32px); }}
+
+/* Settings drawer (top-right gear -> panel on the right) */
+.st-key-gearrow {{ display: flex; justify-content: flex-end; margin: 2px 0 4px; }}
+.st-key-gearrow .stButton {{ flex: none; }}
+.st-key-btn_gear {{ display: flex; justify-content: flex-end; }}
+.st-key-btn_gear button {{ width: 38px; min-width: 38px; height: 38px; padding: 0;
+    border: none; background: transparent; color: {MUTED}; border-radius: 10px; }}
+.st-key-btn_gear button:hover {{ background: {ACCENT_SOFT}; color: {ACCENT}; }}
+.st-key-btn_gear button p {{ display: none; }}
+.aw-settings-head {{ display: flex; align-items: center; gap: 8px; padding: 4px 4px 10px;
+                     border-bottom: 1px solid {LINE}; margin-bottom: 4px; }}
+.aw-settings-title {{ font-weight: 700; color: {INK}; font-size: 0.98rem; }}
+.aw-settings-sub {{ font-size: 0.72rem; color: {SUBTLE}; margin-top: 2px; }}
+.st-key-btn_close_settings {{ display: flex; justify-content: flex-end; padding-top: 2px; }}
+.st-key-btn_close_settings button {{ width: 32px; min-width: 32px; height: 32px; padding: 0;
+    border: none; background: transparent; color: {MUTED}; border-radius: 8px; }}
+.st-key-btn_close_settings button:hover {{ background: #FDECEA; color: #B42318; }}
+.st-key-btn_close_settings button p {{ display: none; }}
 
 /* Sidebar (ChatGPT-style) */
 .aw-logo {{ width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
@@ -256,7 +276,7 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .aw-foot {{ font-size: 0.74rem; color: {SUBTLE}; margin-top: 12px; }}
 
 @media (max-width: 900px) {{
-    .st-key-chat, .st-key-side {{ border-radius: 18px; border: 1px solid {LINE}; min-height: 0; }}
+    .st-key-chat, .st-key-side, .st-key-settings {{ border-radius: 18px; border: 1px solid {LINE}; min-height: 0; }}
     .st-key-messages, .st-key-composer {{ padding-left: 12px; padding-right: 12px; }}
     .aw-head {{ padding: 14px; flex-direction: column; align-items: flex-start; }}
     .aw-pills {{ justify-content: flex-start; }}
@@ -351,6 +371,16 @@ def open_convo(convo_id: int) -> None:
     st.session_state.active_convo = convo_id
 
 
+def toggle_settings() -> None:
+    """Header gear callback: show or hide the right settings drawer."""
+    st.session_state.show_settings = not st.session_state.show_settings
+
+
+def close_settings() -> None:
+    """Drawer callback: hide the right settings drawer."""
+    st.session_state.show_settings = False
+
+
 def _ask(query: str, preset_id: str | None = None) -> None:
     ss = st.session_state
     convo = _active_or_new_convo()
@@ -382,6 +412,7 @@ if "convos" not in st.session_state:
     st.session_state.active_convo = None  # id открытого чата; None = пустой, как в ChatGPT
     st.session_state.next_convo_id = 1
     st.session_state.active_preset = None
+    st.session_state.show_settings = False
     st.session_state.lang = "ru"
     st.session_state.include_route = True
     st.session_state.auto_anchor = True
@@ -643,10 +674,16 @@ def render_inspector(req: RecommendRequest, resp: RecommendResponse) -> None:
 
 # ── Layout: ChatGPT-style sidebar | chat ─────────────────────────────────────
 
-col_side, col_chat = st.columns([0.235, 0.765], gap=None)
+show_settings = st.session_state.show_settings
+if show_settings:
+    col_side, col_chat, col_settings = st.columns([0.20, 0.56, 0.24], gap=None)
+else:
+    col_settings = None
+    col_side, col_chat = st.columns([0.235, 0.765], gap=None)
+
+r_lat, r_lon = round_coords(st.session_state.lat, st.session_state.lon)
 
 with col_side:
-    r_lat, r_lon = round_coords(st.session_state.lat, st.session_state.lon)
     with st.container(key="side"):
         _html(f"""
             <div class="aw-brand">
@@ -707,40 +744,6 @@ with col_side:
                 unsafe_allow_html=True,
             )
 
-        with st.expander("Настройки прогулки", icon=":material/settings:"):
-            st.selectbox(
-                "Точка старта",
-                options=list(LANDMARK_POINTS.keys()) + [CUSTOM_POINT],
-                key="landmark",
-                on_change=apply_landmark,
-                help="Можно выбрать ориентир вместо GPS: так не нужно раскрывать, где вы находитесь.",
-            )
-            if st.session_state.landmark in LANDMARK_POINTS:
-                st.caption(LANDMARK_POINTS[st.session_state.landmark][2])
-            with st.expander("Точные координаты", expanded=st.session_state.landmark == CUSTOM_POINT):
-                c1, c2 = st.columns(2)
-                c1.number_input("Широта", key="lat", format="%.4f", step=0.002)
-                c2.number_input("Долгота", key="lon", format="%.4f", step=0.002)
-                st.caption(f"В логи и API попадает только округление до ~100 м: `{r_lat}, {r_lon}`")
-            st.slider("Радиус пешком, м", min_value=300, max_value=6000, step=100, key="max_distance_m")
-            d1, d2 = st.columns([1.15, 1])
-            d1.date_input("Дата", key="visit_date", format="DD.MM.YYYY")
-            d2.time_input("Время", key="visit_time", step=900)
-            st.caption("Время Астаны (UTC+5). Влияет на статус «открыто / закрыто».")
-            st.selectbox("Погода", options=list(WEATHER_LABELS), format_func=WEATHER_LABELS.get, key="weather")
-            g1, g2 = st.columns(2)
-            g1.number_input("Сколько человек", min_value=1, max_value=15, key="group_size")
-            g2.selectbox("Язык ответа", options=list(LANG_LABELS), format_func=LANG_LABELS.get, key="lang")
-            st.toggle("Без ступенек: коляска, дети", key="accessible")
-            st.toggle("Собрать маршрут из 2–3 мест", key="include_route")
-            st.toggle("Понимать ориентиры из текста запроса", key="auto_anchor",
-                      help="Например, «я возле Хан Шатыра» сдвинет точку старта к ТРЦ.")
-            st.markdown(
-                f'<div class="aw-foot">Применяются к следующему вопросу. База: {len(load_pois())} мест · '
-                f"OpenStreetMap + Visit Astana · поиск <span class=\"mono\">{BACKEND}</span></div>",
-                unsafe_allow_html=True,
-            )
-
         _html(f"""
             <div class="aw-privacy-strip">
                 Точка поиска: <span class="mono">{r_lat}, {r_lon}</span> — округлена до ~100 м.
@@ -772,6 +775,21 @@ with col_chat:
             </div>
             """)
 
+        # Settings gear pinned to the chat header's top-right corner.
+        with st.container(key="gearrow"):
+            _g1, _g2 = st.columns([0.92, 0.08], gap="small")
+            with _g2:
+                st.button(
+                    "Настройки",
+                    key="btn_gear",
+                    icon=":material/settings:",
+                    on_click=toggle_settings,
+                    help="Настройки прогулки: точка старта, радиус, время, погода — панель справа",
+                )
+        if st.session_state.show_settings:
+            _html(f"""<style>.st-key-btn_gear button {{
+                    background: {ACCENT_SOFT} !important; color: {ACCENT} !important; }}</style>""")
+
         messages = st.container(key="messages", height=520, border=False, autoscroll=True)
         with st.container(key="composer"):
             prompt = st.chat_input("Напишите, куда хочется сходить… например: тихое кафе с розеткой на час")
@@ -796,3 +814,58 @@ with col_chat:
                 with st.spinner("Подбираю места…"):
                     resp = run_recommendations(entry["req_json"])
                 render_answer(req, resp, latest=latest)
+
+if col_settings is not None:
+    with col_settings:
+        with st.container(key="settings"):
+            _head, _close = st.columns([0.82, 0.18], gap="small")
+            with _head:
+                _html("""
+                    <div class="aw-settings-head">
+                        <div>
+                            <div class="aw-settings-title">Настройки прогулки</div>
+                            <div class="aw-settings-sub">Применяются к следующему вопросу</div>
+                        </div>
+                    </div>
+                    """)
+            with _close:
+                st.button(
+                    "Закрыть",
+                    key="btn_close_settings",
+                    icon=":material/close:",
+                    on_click=close_settings,
+                    use_container_width=True,
+                    help="Свернуть панель настроек",
+                )
+            st.selectbox(
+                "Точка старта",
+                options=list(LANDMARK_POINTS.keys()) + [CUSTOM_POINT],
+                key="landmark",
+                on_change=apply_landmark,
+                help="Можно выбрать ориентир вместо GPS: так не нужно раскрывать, где вы находитесь.",
+            )
+            if st.session_state.landmark in LANDMARK_POINTS:
+                st.caption(LANDMARK_POINTS[st.session_state.landmark][2])
+            with st.expander("Точные координаты", expanded=st.session_state.landmark == CUSTOM_POINT):
+                c1, c2 = st.columns(2)
+                c1.number_input("Широта", key="lat", format="%.4f", step=0.002)
+                c2.number_input("Долгота", key="lon", format="%.4f", step=0.002)
+                st.caption(f"В логи и API попадает только округление до ~100 м: `{r_lat}, {r_lon}`")
+            st.slider("Радиус пешком, м", min_value=300, max_value=6000, step=100, key="max_distance_m")
+            d1, d2 = st.columns([1.15, 1])
+            d1.date_input("Дата", key="visit_date", format="DD.MM.YYYY")
+            d2.time_input("Время", key="visit_time", step=900)
+            st.caption("Время Астаны (UTC+5). Влияет на статус «открыто / закрыто».")
+            st.selectbox("Погода", options=list(WEATHER_LABELS), format_func=WEATHER_LABELS.get, key="weather")
+            g1, g2 = st.columns(2)
+            g1.number_input("Сколько человек", min_value=1, max_value=15, key="group_size")
+            g2.selectbox("Язык ответа", options=list(LANG_LABELS), format_func=LANG_LABELS.get, key="lang")
+            st.toggle("Без ступенек: коляска, дети", key="accessible")
+            st.toggle("Собрать маршрут из 2–3 мест", key="include_route")
+            st.toggle("Понимать ориентиры из текста запроса", key="auto_anchor",
+                      help="Например, «я возле Хан Шатыра» сдвинет точку старта к ТРЦ.")
+            st.markdown(
+                f'<div class="aw-foot">База: {len(load_pois())} мест · OpenStreetMap + Visit Astana · '
+                f"поиск <span class=\"mono\">{BACKEND}</span></div>",
+                unsafe_allow_html=True,
+            )
