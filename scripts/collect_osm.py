@@ -274,6 +274,14 @@ def main() -> None:
     pois = [p for p in (normalize(e, collected_at) for e in dedupe_by_wikidata(elements)) if p]
     pois = sorted(deduplicate(pois), key=lambda p: p.id)
 
+    # Keep the separately reviewed official-source supplement on OSM refreshes.
+    official_path = ROOT / "data" / "official_poi.json"
+    if official_path.exists():
+        official = [POI(**p) for p in json.loads(official_path.read_text(encoding="utf-8"))]
+        by_id = {p.id: p for p in pois}
+        by_id.update({p.id: p for p in official})
+        pois = sorted(by_id.values(), key=lambda p: p.id)
+
     args.out.parent.mkdir(parents=True, exist_ok=True)
     args.out.write_text(
         json.dumps([p.model_dump() for p in pois], ensure_ascii=False, indent=1) + "\n",

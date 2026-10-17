@@ -1,0 +1,61 @@
+[
+  {
+    "url": "https://visitastana.kz/ru/about-city/what-to-see/muzey-iskusstv/",
+    "category": "museum",
+    "opening_hours": "Mo-Su 10:00-17:00",
+    "hours_evidence": "Каждый день с 10:00 - 17:00",
+    "phone": "+7 (700) 330-09-04"
+  },
+  {
+    "url": "https://visitastana.kz/ru/about-city/what-to-see/dom-muzey-berika-alibaya-/",
+    "category": "museum",
+    "opening_hours": "Mo-Sa 10:00-18:00; Su off",
+    "hours_evidence": "Пн-Суб (10:00-18:00) Вс-выходной",
+    "phone": "+7(701) 733 32 80"
+  },
+  {
+    "url": "https://visitastana.kz/ru/about-city/what-to-see/mineralogicheskiy-geologicheskiy-muzey/",
+    "category": "museum",
+    "opening_hours": "Mo-Su 08:30-13:00,14:00-17:00",
+    "hours_evidence": "Пн-Вс (08:30-17:00) Обед (13:00-14:00)",
+    "phone": "+7 (777) 390-22-77"
+  },
+  {
+    "url": "https://visitastana.kz/ru/about-city/what-to-see/muzey-pozharnykh-i-spasateley/",
+    "category": "museum",
+    "visit_note": "По предварительному звонку (09:00-18:00)",
+    "phone": "+7(701)910‒80‒57"
+  },
+  {
+    "url": "https://visitastana.kz/ru/about-city/what-to-see/natsionalnyy-tsentr-rukopisey-i-redkikh-knig/",
+    "category": "museum",
+    "opening_hours": "Mo-Fr 09:00-13:00,14:00-18:00",
+    "hours_evidence": "Пн-Пт (09:00-18:00) Обед (13:00-14:00)",
+    "phone": "+7 (7172) 76‒90‒60"
+  },
+  {
+    "url": "https://visitastana.kz/ru/about-city/what-to-see/forte-kulanshi-art-space/",
+    "category": "gallery",
+    "opening_hours": "Mo-Sa 10:00-19:00; Su off",
+    "hours_evidence": "Пн – Сб: 10:00 – 19:00 Вс: выходной",
+    "phone": null
+  },
+  {
+    "url": "https://visitastana.kz/ru/about-city/what-to-see/galereya-iskusstv-artumar/",
+    "category": "gallery",
+    "opening_hours": "Mo-Su 11:00-19:00",
+    "hours_evidence": "Пн-Вс (11:00-19:00)",
+    "phone": null
+  },
+  {
+    "url": "https://visitastana.kz/ru/about-city/what-to-see/galereya-iskusstv-khas-sanat/",
+    "category": "gallery",
+    "opening_hours": "Mo-Sa 10:00-19:00; Su off",
+    "hours_evidence": "Пн – Сб: 10:00 – 19:00 Вс: выходной",
+    "phone": "+7 (7172) 50-84-65"
+  },
+  {
+    "url": "https://visitastana.kz/ru/about-city/what-to-see/dvorets-zhastar/",
+    "category": "arts_centre"
+  }
+]

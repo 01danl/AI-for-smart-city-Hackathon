@@ -1,0 +1,155 @@
+[
+ {
+  "id": "visitastana_muzey-iskusstv",
+  "name": "Музей Искусств",
+  "lat": 51.16786,
+  "lon": 71.429207,
+  "description": null,
+  "category": "museum",
+  "tags": [],
+  "opening_hours": "Mo-Su 10:00-17:00",
+  "contacts": {
+   "phone": "+7 (700) 330-09-04",
+   "website": null
+  },
+  "rating": null,
+  "source": "https://visitastana.kz/ru/about-city/what-to-see/muzey-iskusstv/",
+  "collected_at": "2026-10-17"
+ },
+ {
+  "id": "visitastana_dom-muzey-berika-alibaya-",
+  "name": "Дом-музей Берика Алибая",
+  "lat": 51.133096,
+  "lon": 71.504882,
+  "description": null,
+  "category": "museum",
+  "tags": [],
+  "opening_hours": "Mo-Sa 10:00-18:00; Su off",
+  "contacts": {
+   "phone": "+7(701) 733 32 80",
+   "website": null
+  },
+  "rating": null,
+  "source": "https://visitastana.kz/ru/about-city/what-to-see/dom-muzey-berika-alibaya-/",
+  "collected_at": "2026-10-17"
+ },
+ {
+  "id": "visitastana_mineralogicheskiy-geologicheskiy-muzey",
+  "name": "Минералогический (геологический) музей",
+  "lat": 51.162617,
+  "lon": 71.435086,
+  "description": null,
+  "category": "museum",
+  "tags": [],
+  "opening_hours": "Mo-Su 08:30-13:00,14:00-17:00",
+  "contacts": {
+   "phone": "+7 (777) 390-22-77",
+   "website": null
+  },
+  "rating": null,
+  "source": "https://visitastana.kz/ru/about-city/what-to-see/mineralogicheskiy-geologicheskiy-muzey/",
+  "collected_at": "2026-10-17"
+ },
+ {
+  "id": "visitastana_muzey-pozharnykh-i-spasateley",
+  "name": "Музей пожарных и спасателей",
+  "lat": 51.17087,
+  "lon": 71.430744,
+  "description": "По предварительному звонку (09:00-18:00)",
+  "category": "museum",
+  "tags": [],
+  "opening_hours": null,
+  "contacts": {
+   "phone": "+7(701)910‒80‒57",
+   "website": null
+  },
+  "rating": null,
+  "source": "https://visitastana.kz/ru/about-city/what-to-see/muzey-pozharnykh-i-spasateley/",
+  "collected_at": "2026-10-17"
+ },
+ {
+  "id": "visitastana_natsionalnyy-tsentr-rukopisey-i-redkikh-knig",
+  "name": "Национальный центр рукописей и редких книг",
+  "lat": 51.127919,
+  "lon": 71.42689,
+  "description": null,
+  "category": "museum",
+  "tags": [],
+  "opening_hours": "Mo-Fr 09:00-13:00,14:00-18:00",
+  "contacts": {
+   "phone": "+7 (7172) 76‒90‒60",
+   "website": null
+  },
+  "rating": null,
+  "source": "https://visitastana.kz/ru/about-city/what-to-see/natsionalnyy-tsentr-rukopisey-i-redkikh-knig/",
+  "collected_at": "2026-10-17"
+ },
+ {
+  "id": "visitastana_forte-kulanshi-art-space",
+  "name": "FORTE KULANSHI ART SPACE",
+  "lat": 51.126828,
+  "lon": 71.418616,
+  "description": null,
+  "category": "gallery",
+  "tags": [],
+  "opening_hours": "Mo-Sa 10:00-19:00; Su off",
+  "contacts": {
+   "phone": null,
+   "website": null
+  },
+  "rating": null,
+  "source": "https://visitastana.kz/ru/about-city/what-to-see/forte-kulanshi-art-space/",
+  "collected_at": "2026-10-17"
+ },
+ {
+  "id": "visitastana_galereya-iskusstv-artumar",
+  "name": "Галерея искусств «ARTUMAR»",
+  "lat": 51.110313,
+  "lon": 71.462014,
+  "description": null,
+  "category": "gallery",
+  "tags": [],
+  "opening_hours": "Mo-Su 11:00-19:00",
+  "contacts": {
+   "phone": null,
+   "website": null
+  },
+  "rating": null,
+  "source": "https://visitastana.kz/ru/about-city/what-to-see/galereya-iskusstv-artumar/",
+  "collected_at": "2026-10-17"
+ },
+ {
+  "id": "visitastana_galereya-iskusstv-khas-sanat",
+  "name": "Галерея искусств «HAS SANAT»",
+  "lat": 51.128568,
+  "lon": 71.438145,
+  "description": null,
+  "category": "gallery",
+  "tags": [],
+  "opening_hours": "Mo-Sa 10:00-19:00; Su off",
+  "contacts": {
+   "phone": "+7 (7172) 50-84-65",
+   "website": null
+  },
+  "rating": null,
+  "source": "https://visitastana.kz/ru/about-city/what-to-see/galereya-iskusstv-khas-sanat/",
+  "collected_at": "2026-10-17"
+ },
+ {
+  "id": "visitastana_dvorets-zhastar",
+  "name": "Дворец «Жастар»",
+  "lat": 51.170091,
+  "lon": 71.427881,
+  "description": null,
+  "category": "arts_centre",
+  "tags": [],
+  "opening_hours": null,
+  "contacts": {
+   "phone": null,
+   "website": null
+  },
+  "rating": null,
+  "source": "https://visitastana.kz/ru/about-city/what-to-see/dvorets-zhastar/",
+  "collected_at": "2026-10-17"
+ }
+]
