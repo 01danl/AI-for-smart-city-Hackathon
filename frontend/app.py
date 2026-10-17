@@ -1,5 +1,8 @@
 """Streamlit demo UI for Astana Walk AI (Build with AI · Smart City Track).
 
+Chat layout: icon rail on the left, conversation in the middle, scenarios and
+settings on the right.
+
 Launch with:
     streamlit run frontend/app.py
 """
@@ -35,24 +38,26 @@ st.set_page_config(
     page_title="Astana Walk · прогулки по Астане",
     page_icon="🧭",
     layout="wide",
-    initial_sidebar_state="auto",  # open on desktop, collapsed on phones
+    initial_sidebar_state="collapsed",
 )
 
 # ── Design tokens ────────────────────────────────────────────────────────────
 
-INK = "#1B1F24"
-MUTED = "#5C636E"
-SUBTLE = "#8A919B"
-LINE = "#E3DFD6"
-SURFACE = "#FFFFFF"
-ACCENT = "#1F5F7A"
+INK = "#1D2433"
+MUTED = "#667085"
+SUBTLE = "#98A2B3"
+LINE = "#ECEEF3"
+PANEL = "#FFFFFF"
+PAGE = "#F6F7FB"
+ACCENT = "#5146E5"
+ACCENT_SOFT = "#EEEDFD"
 
 # (label, text color, background)
 STATUS_STYLE: dict[str, tuple[str, str, str]] = {
-    "confirmed_open": ("Открыто по расписанию в базе", "#1E6B45", "#E6F2EA"),
-    "likely_open": ("Скоро закроется", "#8A5A12", "#F7EEDC"),
-    "unknown": ("Часы работы неизвестны", "#4F5661", "#ECEBE7"),
-    "likely_closed": ("Закрыто по расписанию в базе", "#9B2C2C", "#F7E4E2"),
+    "confirmed_open": ("Открыто по расписанию в базе", "#127A4B", "#E7F6EE"),
+    "likely_open": ("Скоро закроется", "#946200", "#FDF3DC"),
+    "unknown": ("Часы работы неизвестны", "#5D6679", "#EFF1F5"),
+    "likely_closed": ("Закрыто по расписанию в базе", "#B42318", "#FDECEA"),
 }
 
 SOURCE_STYLE: dict[str, tuple[str, str]] = {
@@ -62,10 +67,10 @@ SOURCE_STYLE: dict[str, tuple[str, str]] = {
 
 # Map dot colors per open status, matching STATUS_STYLE text colors.
 STATUS_RGB: dict[str, list[int]] = {
-    "confirmed_open": [30, 107, 69, 230],
-    "likely_open": [138, 90, 18, 230],
-    "unknown": [31, 95, 122, 230],
-    "likely_closed": [155, 44, 44, 230],
+    "confirmed_open": [18, 122, 75, 235],
+    "likely_open": [148, 98, 0, 235],
+    "unknown": [81, 70, 229, 235],
+    "likely_closed": [180, 35, 24, 235],
 }
 
 CATEGORY_RU: dict[str, str] = {
@@ -86,6 +91,12 @@ WEATHER_LABELS = {
 
 LANG_LABELS = {"ru": "Русский", "kk": "Қазақша", "en": "English"}
 
+# Material icon per jury scenario, in OFFICIAL_PRESETS order.
+PRESET_ICONS = [
+    ":material/directions_walk:", ":material/local_cafe:", ":material/child_care:",
+    ":material/flight_takeoff:", ":material/nightlife:", ":material/museum:",
+]
+
 CUSTOM_POINT = "Свои координаты"
 
 LANDMARK_POINTS: dict[str, tuple[float, float, str]] = {
@@ -99,116 +110,160 @@ LANDMARK_POINTS: dict[str, tuple[float, float, str]] = {
     "За городом (тест пустой выдачи)": (51.3000, 71.0000, "Точка в степи без мест рядом"),
 }
 
+MAX_HISTORY = 12
+
 CSS = f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,400,0,0');
 
-html, body, [class*="css"], .stMarkdown, .stTextInput input, button, label {{
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
+    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }}
-code, .mono {{ font-family: 'JetBrains Mono', ui-monospace, monospace; }}
+.mono {{ font-family: 'JetBrains Mono', ui-monospace, monospace; }}
+.msi {{ font-family: 'Material Symbols Rounded'; font-size: 21px; line-height: 1; font-weight: 400;
+        font-style: normal; display: inline-block; -webkit-font-smoothing: antialiased; }}
 
-.block-container {{ padding-top: 2.2rem; padding-bottom: 3rem; max-width: 1240px; }}
-[data-testid="stSidebar"] {{ border-right: 1px solid {LINE}; }}
-[data-testid="stSidebar"] .block-container {{ padding-top: 1.6rem; }}
+[data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] {{ display: none; }}
+.block-container {{ padding: 1.1rem 1.2rem 1rem 1.2rem; max-width: 1480px; }}
 
-h1, h2, h3, h4 {{ color: {INK}; letter-spacing: -0.015em; }}
+/* Panels */
+.st-key-rail, .st-key-chat, .st-key-side {{ background: {PANEL}; border: 1px solid {LINE}; }}
+.st-key-rail {{ border-radius: 18px 0 0 18px; border-right: none; min-height: 860px;
+                padding: 18px 0 !important; align-items: center; }}
+.st-key-chat {{ border-radius: 0; background: {PAGE}; padding: 0 0 14px 0 !important; min-height: 860px; }}
+.st-key-side {{ border-radius: 0 18px 18px 0; border-left: none; min-height: 860px; padding: 18px 0 !important; }}
 
-.aw-brand {{ display: flex; align-items: center; gap: 10px; margin-bottom: 0.2rem; }}
-.aw-logo {{
-    width: 30px; height: 30px; border-radius: 8px; background: {ACCENT};
-    display: grid; place-items: center; color: #fff; font-weight: 700; font-size: 15px;
-}}
-.aw-brand-name {{ font-weight: 650; font-size: 1.02rem; color: {INK}; }}
-.aw-brand-note {{ color: {SUBTLE}; font-size: 0.85rem; margin-left: 4px; }}
-.aw-title {{ font-size: 2.05rem; line-height: 1.15; font-weight: 700; color: {INK};
-             margin: 1.1rem 0 0.35rem 0; letter-spacing: -0.025em; }}
-.aw-lede {{ color: {MUTED}; font-size: 1.02rem; max-width: 720px; margin-bottom: 1.3rem; }}
+/* Rail */
+.aw-rail {{ display: flex; flex-direction: column; align-items: center; gap: 14px; height: 100%; }}
+.aw-logo {{ width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
+            background: linear-gradient(140deg, #6C5CF6, #4338CA); color: #fff; font-weight: 700;
+            font-size: 18px; margin-bottom: 22px; box-shadow: 0 6px 14px rgba(81,70,229,.28); }}
+.aw-rail-item {{ width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
+                 color: {MUTED}; }}
+.aw-rail-item.active {{ background: {ACCENT_SOFT}; color: {ACCENT}; }}
+.aw-rail-spacer {{ flex: 1; min-height: 340px; }}
+.aw-avatar {{ width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
+              background: #FDE7D8; color: #9A3412; font-weight: 700; font-size: 14px; }}
 
-.aw-section-label {{
-    font-size: 0.74rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em;
-    color: {SUBTLE}; margin: 1.4rem 0 0.55rem 0;
-}}
+/* Chat header */
+.aw-head {{ display: flex; align-items: center; justify-content: space-between; gap: 12px;
+            padding: 16px 26px; border-bottom: 1px solid {LINE}; background: {PANEL}; }}
+.aw-head-title {{ font-size: 1.45rem; font-weight: 700; color: {INK}; letter-spacing: -0.02em; }}
+.aw-head-sub {{ font-size: 0.8rem; color: {SUBTLE}; margin-top: 2px; }}
+.aw-pills {{ display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }}
+.aw-pill {{ display: inline-flex; align-items: center; gap: 6px; border: 1px solid {LINE};
+            border-radius: 999px; padding: 6px 12px; font-size: 0.78rem; color: {INK}; background: {PANEL}; }}
+.aw-pill .msi {{ font-size: 17px; color: {MUTED}; }}
 
-/* Search form */
-[data-testid="stForm"] {{ border: 1px solid {LINE}; background: {SURFACE}; border-radius: 14px;
-                          padding: 0.9rem 1rem 0.4rem 1rem; }}
-[data-testid="stForm"] input {{ font-size: 1.05rem; }}
+/* Messages */
+.st-key-messages {{ padding: 6px 26px 0 26px; }}
+.aw-row {{ display: flex; gap: 12px; align-items: flex-start; margin: 14px 0; }}
+.aw-row.user {{ justify-content: flex-end; }}
+.aw-bot-badge {{ flex: none; width: 34px; height: 34px; border-radius: 50%; background: {ACCENT_SOFT};
+                 color: {ACCENT}; display: grid; place-items: center; font-weight: 700; font-size: 0.78rem; }}
+.aw-user-badge {{ flex: none; width: 34px; height: 34px; border-radius: 50%; background: #1D2433;
+                  color: #fff; display: grid; place-items: center; font-weight: 600; font-size: 0.74rem; }}
+.aw-bubble {{ background: {PANEL}; border: 1px solid {LINE}; border-radius: 14px; padding: 11px 14px;
+              font-size: 0.9rem; color: {INK}; line-height: 1.55; max-width: 640px; }}
+.aw-bubble.user {{ background: {ACCENT}; border-color: {ACCENT}; color: #fff; border-radius: 14px;
+                   box-shadow: 0 6px 16px rgba(81,70,229,.22); }}
+.aw-bubble .aw-time {{ font-size: 0.72rem; color: {SUBTLE}; text-align: right; margin-top: 4px; }}
+.aw-bubble.user .aw-time {{ color: rgba(255,255,255,.72); }}
+.aw-user-meta {{ font-size: 0.74rem; color: rgba(255,255,255,.78); margin-top: 6px;
+                 display: flex; gap: 10px; flex-wrap: wrap; }}
 
-/* Preset pills */
-div[data-testid="stHorizontalBlock"] .stButton button[kind="secondary"] {{
-    border-radius: 999px; border: 1px solid {LINE}; background: {SURFACE}; color: {INK};
-    font-size: 0.86rem; padding: 0.35rem 0.9rem; font-weight: 500; min-height: 0;
-}}
-div[data-testid="stHorizontalBlock"] .stButton button[kind="secondary"]:hover {{
-    border-color: {ACCENT}; color: {ACCENT};
-}}
+.aw-answer {{ max-width: 680px; }}
+.aw-context {{ display: flex; flex-wrap: wrap; gap: 6px; margin: 8px 0 2px 0; }}
+.aw-chip {{ font-size: 0.74rem; padding: 3px 9px; border-radius: 999px; background: {PANEL};
+            border: 1px solid {LINE}; color: {MUTED}; }}
+.aw-chip b {{ color: {INK}; font-weight: 600; }}
 
-/* Context strip */
-.aw-context {{ display: flex; flex-wrap: wrap; gap: 6px 18px; align-items: center;
-               padding: 0.7rem 0.95rem; border: 1px solid {LINE}; border-radius: 12px;
-               background: {SURFACE}; font-size: 0.86rem; color: {MUTED}; margin: 0.4rem 0 1.1rem 0; }}
-.aw-context b {{ color: {INK}; font-weight: 600; }}
-.aw-context .lead {{ color: {INK}; font-weight: 600; }}
-.aw-context > span + span::before {{ content: "·"; color: {LINE}; margin-right: 18px; margin-left: -12px; }}
-.aw-context > span:nth-child(2)::before {{ content: none; }}
+.aw-card {{ background: {PANEL}; border: 1px solid {LINE}; border-radius: 14px; padding: 13px 15px;
+            margin-top: 10px; }}
+.aw-card-top {{ display: flex; justify-content: space-between; gap: 10px; align-items: flex-start; }}
+.aw-name {{ font-size: 1rem; font-weight: 700; color: {INK}; }}
+.aw-cat {{ font-size: 0.78rem; color: {SUBTLE}; }}
+.aw-num {{ flex: none; font-size: 0.72rem; font-weight: 700; color: {ACCENT}; background: {ACCENT_SOFT};
+           border-radius: 8px; padding: 3px 8px; }}
+.aw-meta {{ display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.82rem; color: {MUTED}; margin: 8px 0; }}
+.aw-meta b {{ color: {INK}; }}
+.aw-badges {{ display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }}
+.aw-badge {{ font-size: 0.72rem; font-weight: 600; padding: 3px 9px; border-radius: 999px; }}
+.aw-badge-src {{ border: 1px solid {LINE}; color: {MUTED}; font-weight: 500; }}
+.aw-badge-src .mono {{ color: {SUBTLE}; font-size: 0.68rem; margin-left: 4px; }}
+.aw-k {{ font-weight: 600; color: {INK}; }}
+.aw-card p {{ margin: 0 0 6px 0; font-size: 0.87rem; line-height: 1.55; color: #344054; }}
+.aw-note {{ font-size: 0.78rem; color: {MUTED}; border-top: 1px dashed {LINE}; padding-top: 7px; margin-top: 4px; }}
+.aw-card details {{ font-size: 0.78rem; color: {MUTED}; margin-top: 6px; }}
+.aw-card summary {{ cursor: pointer; color: {ACCENT}; font-weight: 600; }}
+.aw-card details div {{ margin-top: 5px; line-height: 1.5; }}
+.aw-card a {{ color: {ACCENT}; }}
+.aw-disclaimer {{ font-size: 0.74rem; color: {SUBTLE}; margin-top: 8px; line-height: 1.45; }}
 
-/* Recommendation cards */
-.aw-card {{ background: {SURFACE}; border: 1px solid {LINE}; border-radius: 14px;
-            padding: 1.15rem 1.25rem 1.05rem 1.25rem; margin-bottom: 0.85rem; }}
-.aw-card-top {{ display: flex; gap: 12px; align-items: flex-start; }}
-.aw-num {{ flex: none; width: 26px; height: 26px; border-radius: 50%; border: 1px solid {LINE};
-           display: grid; place-items: center; font-size: 0.8rem; font-weight: 600; color: {MUTED}; }}
-.aw-name {{ font-size: 1.12rem; font-weight: 650; color: {INK}; line-height: 1.3; }}
-.aw-cat {{ font-size: 0.82rem; color: {SUBTLE}; margin-top: 1px; }}
-.aw-meta {{ display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.86rem; color: {MUTED};
-            margin: 0.6rem 0 0.65rem 38px; }}
-.aw-meta b {{ color: {INK}; font-weight: 600; }}
-.aw-badges {{ display: flex; flex-wrap: wrap; gap: 6px; margin-left: 38px; }}
-.aw-badge {{ font-size: 0.76rem; font-weight: 600; padding: 3px 9px; border-radius: 6px; }}
-.aw-badge-src {{ background: transparent; border: 1px solid {LINE}; color: {MUTED}; font-weight: 500; }}
-.aw-badge-src .mono {{ color: {SUBTLE}; font-size: 0.72rem; margin-left: 4px; }}
-.aw-body {{ margin: 0.8rem 0 0 38px; font-size: 0.93rem; color: {INK}; line-height: 1.55; }}
-.aw-body p {{ margin: 0 0 0.55rem 0; }}
-.aw-k {{ display: block; font-size: 0.74rem; font-weight: 600; text-transform: uppercase;
-         letter-spacing: 0.06em; color: {SUBTLE}; margin-bottom: 2px; }}
-.aw-note {{ font-size: 0.84rem; color: {MUTED}; border-top: 1px dashed {LINE};
-            padding-top: 0.6rem; margin-top: 0.3rem; }}
-.aw-card details {{ margin: 0.5rem 0 0 38px; font-size: 0.83rem; color: {MUTED}; }}
-.aw-card summary {{ cursor: pointer; color: {ACCENT}; font-weight: 500; }}
-.aw-card details div {{ margin-top: 0.4rem; line-height: 1.5; }}
+/* Expanders inside chat (map, route, inspector) */
+.st-key-messages [data-testid="stExpander"] {{ max-width: 680px; margin-left: 46px; background: {PANEL};
+                                               border-radius: 12px; }}
+.st-key-messages [data-testid="stExpander"] details {{ border-color: {LINE}; border-radius: 12px; }}
 
-/* Route */
-.aw-route-head {{ display: flex; flex-wrap: wrap; gap: 6px 22px; font-size: 0.9rem; color: {MUTED};
-                  margin: 0.2rem 0 1rem 0; }}
-.aw-route-head b {{ color: {INK}; }}
-.aw-stop {{ background: {SURFACE}; border: 1px solid {LINE}; border-radius: 12px; padding: 0.95rem 1rem;
-            height: 100%; }}
-.aw-stop-stage {{ font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em;
-                  color: {ACCENT}; }}
-.aw-stop-name {{ font-weight: 650; color: {INK}; margin: 0.25rem 0 0.55rem 0; font-size: 1rem; }}
-.aw-stop-row {{ display: flex; justify-content: space-between; font-size: 0.84rem; color: {MUTED};
-                padding: 3px 0; border-bottom: 1px solid #F0EDE7; }}
-.aw-stop-row:last-child {{ border-bottom: none; }}
-.aw-stop-row b {{ color: {INK}; font-weight: 600; }}
-
-.aw-legend {{ display: flex; flex-wrap: wrap; gap: 4px 14px; font-size: 0.8rem; color: {MUTED}; margin-top: 0.4rem; }}
+.aw-stop {{ background: {PAGE}; border: 1px solid {LINE}; border-radius: 12px; padding: 10px 12px; height: 100%; }}
+.aw-stop-stage {{ font-size: 0.68rem; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: {ACCENT}; }}
+.aw-stop-name {{ font-weight: 700; color: {INK}; margin: 3px 0 6px 0; font-size: 0.92rem; }}
+.aw-stop-row {{ display: flex; justify-content: space-between; font-size: 0.78rem; color: {MUTED}; padding: 2px 0; }}
+.aw-stop-row b {{ color: {INK}; }}
+.aw-legend {{ display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.74rem; color: {MUTED}; margin-top: 6px; }}
 .aw-dot {{ display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }}
 
-.aw-empty {{ border: 1px dashed {LINE}; border-radius: 14px; padding: 2rem 1.5rem; text-align: center;
-             color: {MUTED}; background: {SURFACE}; }}
-.aw-empty b {{ color: {INK}; display: block; font-size: 1.05rem; margin-bottom: 0.3rem; }}
-.aw-disclaimer {{ font-size: 0.8rem; color: {SUBTLE}; margin-top: 1.4rem; line-height: 1.5; }}
+/* Composer */
+.st-key-composer {{ padding: 0 26px; }}
+[data-testid="stChatInput"] {{ border-radius: 16px; border: 1px solid {LINE}; background: {PANEL};
+                               box-shadow: 0 8px 24px rgba(16,24,40,.06); }}
+[data-testid="stChatInput"] textarea {{ font-size: 0.95rem; min-height: 64px; }}
+[data-testid="stChatInputSubmitButton"] {{ background: {ACCENT} !important; color: #fff !important;
+                                           border-radius: 10px !important; }}
 
-@media (max-width: 640px) {{
-    .aw-title {{ font-size: 1.6rem; }}
-    .aw-meta, .aw-badges, .aw-body, .aw-card details {{ margin-left: 0; }}
-}}
-
-/* Tabs */
-.stTabs [data-baseweb="tab-list"] {{ gap: 22px; border-bottom: 1px solid {LINE}; }}
-.stTabs [data-baseweb="tab"] {{ padding: 0.5rem 0; font-weight: 500; color: {MUTED}; }}
+/* Right panel */
+.aw-profile {{ display: flex; align-items: center; gap: 12px; padding: 0 22px 16px 22px;
+               border-bottom: 1px solid {LINE}; }}
+.aw-profile .aw-avatar {{ position: relative; }}
+.aw-online {{ position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px; border-radius: 50%;
+              background: #12B76A; border: 2px solid #fff; }}
+.aw-profile-name {{ font-weight: 700; color: {INK}; font-size: 0.92rem; }}
+.aw-profile-sub {{ font-size: 0.78rem; color: {MUTED}; }}
+.st-key-side .stTabs {{ padding: 0 22px; }}
+.stTabs [data-baseweb="tab-list"] {{ gap: 20px; border-bottom: 1px solid {LINE}; }}
+.stTabs [data-baseweb="tab"] {{ padding: 10px 2px; font-weight: 600; color: {MUTED}; font-size: 0.88rem; }}
 .stTabs [aria-selected="true"] {{ color: {INK}; }}
+.stTabs [data-baseweb="tab-highlight"] {{ background: {ACCENT}; }}
+.aw-side-title {{ font-weight: 700; color: {INK}; font-size: 0.98rem; margin: 14px 0 6px 0; }}
+.aw-side-sep {{ border-top: 1px solid {LINE}; margin: 14px -22px 0 -22px; }}
+
+.st-key-presets .stButton button {{ justify-content: flex-start; border: none; background: transparent;
+    color: {INK}; font-weight: 500; font-size: 0.9rem; padding: 10px 12px; border-radius: 0;
+    border-left: 3px solid transparent; }}
+.st-key-presets .stButton button:hover {{ background: {ACCENT_SOFT}; color: {INK}; }}
+.st-key-presets .stButton button > div, .st-key-presets .stButton button [data-testid="stMarkdownContainer"] {{
+    justify-content: flex-start; width: 100%; text-align: left; }}
+.st-key-presets .stButton button p {{ text-align: left; }}
+.st-key-presets [data-testid="stVerticalBlock"] {{ gap: 2px; }}
+
+.aw-recent {{ display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; font-size: 0.86rem;
+              color: {INK}; border-bottom: 1px solid #F4F5F8; }}
+.aw-recent span:first-child {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+.aw-recent span:last-child {{ color: {SUBTLE}; font-size: 0.76rem; flex: none; }}
+.aw-recent.current span:first-child {{ color: {ACCENT}; font-weight: 600; }}
+.aw-empty-side {{ font-size: 0.82rem; color: {SUBTLE}; padding: 6px 0; }}
+.aw-foot {{ font-size: 0.74rem; color: {SUBTLE}; margin-top: 12px; }}
+
+@media (max-width: 900px) {{
+    .st-key-rail {{ display: none; }}
+    .st-key-chat, .st-key-side {{ border-radius: 18px; border: 1px solid {LINE}; min-height: 0; }}
+    .st-key-messages, .st-key-composer {{ padding-left: 12px; padding-right: 12px; }}
+    .aw-head {{ padding: 14px; flex-direction: column; align-items: flex-start; }}
+    .aw-pills {{ justify-content: flex-start; }}
+    .st-key-messages {{ height: auto !important; max-height: 62vh; }}
+    .st-key-messages [data-testid="stExpander"] {{ margin-left: 0; }}
+}}
 </style>
 """
 
@@ -226,10 +281,8 @@ def _split_iso(now_iso: str | None) -> tuple[date, time]:
     return dt.date(), dt.time().replace(second=0, microsecond=0)
 
 
-def apply_preset(preset: dict) -> None:
-    """Load a jury scenario into the widgets (runs as a button callback, before widgets render)."""
+def _load_settings(preset: dict) -> None:
     ss = st.session_state
-    ss.query = preset["query"]
     ss.lat = float(preset["lat"])
     ss.lon = float(preset["lon"])
     ss.max_distance_m = int(preset["max_distance_m"])
@@ -244,168 +297,129 @@ def apply_preset(preset: dict) -> None:
             break
 
 
+def _build_request(query: str) -> RecommendRequest:
+    ss = st.session_state
+    return RecommendRequest(
+        query=query,
+        lat=ss.lat,
+        lon=ss.lon,
+        max_distance_m=ss.max_distance_m,
+        lang=ss.lang,
+        group_size=ss.group_size,
+        accessible=ss.accessible,
+        weather=ss.weather,
+        include_route=ss.include_route,
+        auto_anchor=ss.auto_anchor,
+        now_iso=datetime.combine(ss.visit_date, ss.visit_time).strftime("%Y-%m-%dT%H:%M"),
+    )
+
+
+def _ask(query: str, preset_id: str | None = None) -> None:
+    ss = st.session_state
+    ss.history.append({
+        "query": query,
+        "req_json": _build_request(query).model_dump_json(),
+        "start": ss.landmark if ss.landmark != CUSTOM_POINT else "свои координаты",
+    })
+    ss.history = ss.history[-MAX_HISTORY:]
+    ss.active_preset = preset_id
+
+
+def run_preset(preset: dict) -> None:
+    """Button callback: load a jury scenario's context and ask its question."""
+    _load_settings(preset)
+    _ask(preset["query"], preset["id"])
+
+
 def apply_landmark() -> None:
     name = st.session_state.landmark
     if name in LANDMARK_POINTS:
         st.session_state.lat, st.session_state.lon, _ = LANDMARK_POINTS[name]
 
 
-if "query" not in st.session_state:
+if "history" not in st.session_state:
+    st.session_state.history = []
+    st.session_state.active_preset = None
     st.session_state.lang = "ru"
     st.session_state.include_route = True
     st.session_state.auto_anchor = True
-    apply_preset(OFFICIAL_PRESETS[0])
+    _load_settings(OFFICIAL_PRESETS[0])
 
 
 @st.cache_data(show_spinner=False, max_entries=64)
 def run_recommendations(req_json: str) -> RecommendResponse:
-    """Same request -> same answer: avoids repeated LLM calls on reruns and repeated presets."""
+    """Same request -> same answer: no repeated LLM calls on reruns or repeated scenarios."""
     return generate_recommendations(RecommendRequest.model_validate_json(req_json))
 
 
-# ── Sidebar: context ─────────────────────────────────────────────────────────
-
-with st.sidebar:
-    st.markdown("### Где и когда")
-
-    st.selectbox(
-        "Точка старта",
-        options=list(LANDMARK_POINTS.keys()) + [CUSTOM_POINT],
-        key="landmark",
-        on_change=apply_landmark,
-        help="Можно выбрать ориентир вместо GPS: так не нужно раскрывать, где вы находитесь.",
-    )
-    if st.session_state.landmark in LANDMARK_POINTS:
-        st.caption(LANDMARK_POINTS[st.session_state.landmark][2])
-
-    with st.expander("Точные координаты", expanded=st.session_state.landmark == CUSTOM_POINT):
-        c1, c2 = st.columns(2)
-        c1.number_input("Широта", key="lat", format="%.4f", step=0.002)
-        c2.number_input("Долгота", key="lon", format="%.4f", step=0.002)
-        r_lat, r_lon = round_coords(st.session_state.lat, st.session_state.lon)
-        st.caption(f"В логи и API попадает только округление до ~100 м: `{r_lat}, {r_lon}`")
-
-    st.slider("Радиус пешком, м", min_value=300, max_value=6000, step=100, key="max_distance_m")
-
-    d1, d2 = st.columns([1.15, 1])
-    d1.date_input("Дата", key="visit_date", format="DD.MM.YYYY")
-    d2.time_input("Время", key="visit_time", step=900)
-    st.caption("Время Астаны (UTC+5). Влияет на статус «открыто / закрыто».")
-
-    st.markdown("### Предпочтения")
-    st.selectbox("Погода", options=list(WEATHER_LABELS), format_func=WEATHER_LABELS.get, key="weather")
-    g1, g2 = st.columns(2)
-    g1.number_input("Сколько человек", min_value=1, max_value=15, key="group_size")
-    g2.selectbox("Язык ответа", options=list(LANG_LABELS), format_func=LANG_LABELS.get, key="lang")
-    st.toggle("Без ступенек: коляска, дети", key="accessible")
-    st.toggle("Собрать маршрут из 2–3 мест", key="include_route")
-    st.toggle("Понимать ориентиры из текста запроса", key="auto_anchor",
-              help="Например, «я возле Хан Шатыра» сдвинет точку старта к ТРЦ.")
-
-    st.divider()
-    st.caption(f"База: {len(load_pois())} мест · OpenStreetMap + Visit Astana · поиск `{BACKEND}`")
+# ── Rendering helpers ────────────────────────────────────────────────────────
 
 
-# ── Header and search ────────────────────────────────────────────────────────
-
-st.markdown(
-    f"""
-    <div class="aw-brand">
-        <div class="aw-logo">A</div>
-        <span class="aw-brand-name">Astana Walk</span>
-        <span class="aw-brand-note">· Build with AI × НИЦ Smart City</span>
-    </div>
-    <div class="aw-title">Куда сходить в Астане прямо сейчас</div>
-    <div class="aw-lede">
-        Опишите, что хочется сделать. Мы подберём 1–3 реальных места рядом, покажем,
-        сколько идти, открыто ли сейчас и чем там заняться.
-    </div>
-    """,
-    unsafe_allow_html=True,
-)
-
-with st.form("search", border=False):
-    f1, f2 = st.columns([5, 1], vertical_alignment="bottom")
-    f1.text_input(
-        "Запрос",
-        key="query",
-        placeholder="Например: хочу тихое кафе с розеткой, чтобы поработать час",
-        label_visibility="collapsed",
-    )
-    f2.form_submit_button("Найти", type="primary", use_container_width=True)
-
-st.markdown('<div class="aw-section-label">Сценарии для демо</div>', unsafe_allow_html=True)
-preset_cols = st.columns(3)
-for idx, preset in enumerate(OFFICIAL_PRESETS):
-    title = preset["title"].split(". ", 1)[-1]
-    preset_cols[idx % 3].button(
-        title, key=f"btn_{preset['id']}", on_click=apply_preset, args=(preset,), use_container_width=True
-    )
-
-# ── Run ──────────────────────────────────────────────────────────────────────
-
-ss = st.session_state
-now_iso = datetime.combine(ss.visit_date, ss.visit_time).strftime("%Y-%m-%dT%H:%M")
-req = RecommendRequest(
-    query=ss.query,
-    lat=ss.lat,
-    lon=ss.lon,
-    max_distance_m=ss.max_distance_m,
-    lang=ss.lang,
-    group_size=ss.group_size,
-    accessible=ss.accessible,
-    weather=ss.weather,
-    include_route=ss.include_route,
-    auto_anchor=ss.auto_anchor,
-    now_iso=now_iso,
-)
-
-with st.spinner("Подбираем места…"):
-    resp = run_recommendations(req.model_dump_json())
-
-u = resp.used_data
-
-# ── Context strip: what data was used ────────────────────────────────────────
-
-parts = [
-    "<span class='lead'>Учтено</span>",
-    f"локация <b>~100 м</b> <span class='mono'>({u.rounded_coords[0]}, {u.rounded_coords[1]})</span>",
-]
-if u.anchor_resolved:
-    parts.append(f"ориентир <b>{escape(u.anchor_resolved.split('(')[0].strip())}</b>")
-if u.tags:
-    parts.append("теги " + ", ".join(f"<b>{escape(t)}</b>" for t in u.tags[:4]))
-if u.filters:
-    parts.append("фильтры " + ", ".join(f"<b>{escape(f)}</b>" for f in u.filters[:4]))
-parts.append(f"время <b>{u.time_budget_min} мин</b>" if u.time_budget_min else "время <b>авто</b>")
-parts.append(f"погода <b>{escape(WEATHER_LABELS.get(u.weather_context, u.weather_context))}</b>")
-parts.append(f"проверено мест <b>{u.candidates_evaluated}</b>")
-parts.append(
-    "ответ <b>нейросеть</b>" if "llm" in u.generation_mode.lower() else "ответ <b>по шаблону</b>"
-)
-st.markdown(
-    '<div class="aw-context">' + "".join(f"<span>{p}</span>" for p in parts) + "</div>",
-    unsafe_allow_html=True,
-)
+def _html(markup: str, target=st) -> None:
+    """Render raw HTML. Lines are flattened: Markdown would treat indented lines after
+    a blank line as a code block and show the tags as text."""
+    target.markdown(" ".join(line.strip() for line in markup.splitlines()), unsafe_allow_html=True)
 
 
-# ── Results ──────────────────────────────────────────────────────────────────
+def _hhmm(req: RecommendRequest) -> str:
+    return (req.now_iso or "")[11:16]
 
 
-def render_card(idx: int, rec) -> None:
+def render_user(entry: dict, req: RecommendRequest) -> None:
+    km = f"{req.max_distance_m / 1000:.1f}".rstrip("0").rstrip(".")
+    extras = []
+    if req.accessible:
+        extras.append("без ступенек")
+    if req.group_size > 1:
+        extras.append(f"{req.group_size} чел.")
+    if req.weather != "normal":
+        extras.append(WEATHER_LABELS[req.weather].lower())
+    meta = " · ".join([f"📍 {escape(entry['start'])}", f"радиус {km} км", *extras])
+    _html(f"""
+        <div class="aw-row user">
+            <div class="aw-bubble user">
+                {escape(entry['query'])}
+                <div class="aw-user-meta">{meta}</div>
+                <div class="aw-time">{_hhmm(req)} ✓✓</div>
+            </div>
+            <div class="aw-user-badge">Вы</div>
+        </div>
+        """)
+
+
+def _context_chips(u) -> str:
+    chips = [f"локация <b>~100 м</b> <span class='mono'>{u.rounded_coords[0]}, {u.rounded_coords[1]}</span>"]
+    if u.anchor_resolved:
+        chips.append(f"ориентир <b>{escape(u.anchor_resolved.split('(')[0].strip())}</b>")
+    if u.tags:
+        chips.append("теги " + ", ".join(f"<b>{escape(t)}</b>" for t in u.tags[:4]))
+    if u.filters:
+        chips.append("фильтры " + ", ".join(f"<b>{escape(f)}</b>" for f in u.filters[:4]))
+    chips.append(f"время <b>{u.time_budget_min} мин</b>" if u.time_budget_min else "время <b>авто</b>")
+    chips.append(f"проверено мест <b>{u.candidates_evaluated}</b>")
+    chips.append("ответ <b>нейросеть</b>" if "llm" in u.generation_mode.lower() else "ответ <b>по шаблону</b>")
+    return "".join(f'<span class="aw-chip">{c}</span>' for c in chips)
+
+
+def _card_html(idx: int, rec) -> str:
     st_label, st_fg, st_bg = STATUS_STYLE.get(rec.open_status, STATUS_STYLE["unknown"])
     src_label, src_code = SOURCE_STYLE.get(rec.source, SOURCE_STYLE["poi_data"])
     category = CATEGORY_RU.get(rec.category, rec.category)
     facts = "<br/>".join(escape(f) for f in rec.facts_poi_data) or "—"
-    st.markdown(
-        f"""
+    official = ""
+    poi = load_pois().get(rec.poi_id)
+    if poi and poi.source.startswith("https://visitastana.kz/"):
+        official = (
+            f'<div class="aw-note"><a href="{escape(poi.source)}" target="_blank">Источник: Visit Astana</a>'
+            f" · получено {escape(poi.collected_at)}"
+            + (f"<br/>{escape(poi.description)}" if poi.description else "")
+            + "</div>"
+        )
+    return f"""
         <div class="aw-card">
             <div class="aw-card-top">
-                <div class="aw-num">{idx}</div>
-                <div>
-                    <div class="aw-name">{escape(rec.name)}</div>
-                    <div class="aw-cat">{escape(category)}</div>
-                </div>
+                <div><div class="aw-name">{escape(rec.name)}</div><div class="aw-cat">{escape(category)}</div></div>
+                <span class="aw-num">#{idx}</span>
             </div>
             <div class="aw-meta">
                 <span><b>{rec.distance_m} м</b> от вас</span>
@@ -416,36 +430,54 @@ def render_card(idx: int, rec) -> None:
                 <span class="aw-badge" style="color:{st_fg}; background:{st_bg};">{st_label}</span>
                 <span class="aw-badge aw-badge-src">{src_label}<span class="mono">{src_code}</span></span>
             </div>
-            <div class="aw-body">
-                <p><span class="aw-k">Почему</span>{escape(rec.why)}</p>
-                <p><span class="aw-k">Что делать</span>{escape(rec.what_to_do)}</p>
-                <div class="aw-note">{escape(rec.confidence_note)}</div>
-            </div>
+            <p><span class="aw-k">Почему: </span>{escape(rec.why)}</p>
+            <p><span class="aw-k">Что делать: </span>{escape(rec.what_to_do)}</p>
+            <div class="aw-note">{escape(rec.confidence_note)}</div>
+            {official}
             <details>
                 <summary>Факты из базы и что добавил ИИ</summary>
                 <div><b>Факты [poi_data]:</b><br/>{facts}</div>
                 <div><b>Граница фактов и генерации:</b> {escape(rec.generated_plan_note or "—")}</div>
             </details>
         </div>
-        """,
-        unsafe_allow_html=True,
-    )
-    poi = load_pois().get(rec.poi_id)
-    if poi and poi.source.startswith("https://visitastana.kz/"):
-        st.caption(f"[Источник: Visit Astana]({poi.source}) · получено {poi.collected_at}")
-        if poi.description:
-            st.caption(poi.description)
+    """
 
 
-def render_map() -> None:
-    center_lat, center_lon = u.rounded_coords
+def render_answer(req: RecommendRequest, resp: RecommendResponse, latest: bool) -> None:
+    u = resp.used_data
+    if resp.recommendations:
+        n = len(resp.recommendations)
+        word = "место" if n == 1 else "места"
+        intro = f"Нашёл {n} {word} рядом. Вот что подойдёт:"
+        cards = "".join(_card_html(i, r) for i, r in enumerate(resp.recommendations, start=1))
+        footer = f'<div class="aw-disclaimer">{escape(resp.disclaimer)}</div>' if latest else ""
+    else:
+        intro = "<b>Рядом ничего не нашлось.</b> " + escape(resp.disclaimer)
+        cards, footer = "", ""
+    _html(f"""
+        <div class="aw-row">
+            <div class="aw-bot-badge">AW</div>
+            <div class="aw-answer">
+                <div class="aw-bubble">{intro}<div class="aw-time">{_hhmm(req)} ✓✓</div></div>
+                <div class="aw-context">{_context_chips(u)}</div>
+                {cards}
+                {footer}
+            </div>
+        </div>
+        """)
+    if latest and resp.recommendations:
+        with st.expander("Карта и маршрут", icon=":material/map:", expanded=True):
+            render_map(resp)
+            render_route(resp)
+        with st.expander("Как это работает: поиск, кандидаты и промпт", icon=":material/manage_search:"):
+            render_inspector(req, resp)
+
+
+def render_map(resp: RecommendResponse) -> None:
+    center_lat, center_lon = resp.used_data.rounded_coords
     poi_points = [
-        {
-            "name": f"{i}. {r.name} · {r.distance_m} м",
-            "lat": r.lat,
-            "lon": r.lon,
-            "color": STATUS_RGB.get(r.open_status, STATUS_RGB["unknown"]),
-        }
+        {"name": f"{i}. {r.name} · {r.distance_m} м", "lat": r.lat, "lon": r.lon,
+         "color": STATUS_RGB.get(r.open_status, STATUS_RGB["unknown"])}
         for i, r in enumerate(resp.recommendations, start=1)
     ]
     layers = [
@@ -455,8 +487,8 @@ def render_map() -> None:
             data=[{"name": "Ваша зона (~100 м, точные координаты не сохраняются)",
                    "lat": center_lat, "lon": center_lon}],
             get_position="[lon, lat]",
-            get_fill_color=[31, 95, 122, 40],
-            get_line_color=[31, 95, 122, 200],
+            get_fill_color=[81, 70, 229, 38],
+            get_line_color=[81, 70, 229, 200],
             get_radius=110,
             stroked=True,
             line_width_min_pixels=1.5,
@@ -481,7 +513,7 @@ def render_map() -> None:
             "PathLayer",
             data=[{"name": resp.route.title, "path": path}],
             get_path="path",
-            get_color=[27, 31, 36, 150],
+            get_color=[81, 70, 229, 170],
             width_min_pixels=2,
             pickable=True,
         ))
@@ -492,7 +524,7 @@ def render_map() -> None:
             layers=layers,
             tooltip={"text": "{name}"},
         ),
-        height=460,
+        height=340,
     )
     legend = "".join(
         f'<span><span class="aw-dot" style="background:rgb({c[0]},{c[1]},{c[2]})"></span>{STATUS_STYLE[s][0]}</span>'
@@ -504,103 +536,210 @@ def render_map() -> None:
     )
 
 
-if not resp.recommendations:
-    st.markdown(
-        f'<div class="aw-empty"><b>Рядом ничего не нашлось</b>{escape(resp.disclaimer)}</div>',
-        unsafe_allow_html=True,
+def render_route(resp: RecommendResponse) -> None:
+    rt = resp.route
+    if not rt:
+        st.caption("Для маршрута нужно минимум 2 подходящих места в радиусе.")
+        return
+    st.markdown(f"**{escape(rt.title)}** · всего ~{rt.total_duration_min} мин, "
+                f"пешком {rt.total_distance_m} м")
+    for col, stop in zip(st.columns(len(rt.stops)), rt.stops):
+        s_label, s_fg, s_bg = STATUS_STYLE.get(stop.open_status, STATUS_STYLE["unknown"])
+        _html(f"""
+            <div class="aw-stop">
+                <div class="aw-stop-stage">Шаг {stop.step} · {escape(stop.stage_note)}</div>
+                <div class="aw-stop-name">{escape(stop.name)}</div>
+                <div class="aw-stop-row"><span>Переход</span><b>{stop.from_prev_m} м · ~{stop.from_prev_walk_min} мин</b></div>
+                <div class="aw-stop-row"><span>На месте</span><b>~{stop.visit_min} мин</b></div>
+                <div class="aw-stop-row"><span>От старта</span><b>+{stop.arrival_offset_min}…+{stop.departure_offset_min} мин</b></div>
+                <div style="margin-top:6px;"><span class="aw-badge" style="color:{s_fg}; background:{s_bg};"
+                     title="{escape(stop.open_reason)}">{s_label}</span></div>
+            </div>
+            """, target=col)
+
+
+def render_inspector(req: RecommendRequest, resp: RecommendResponse) -> None:
+    st.caption("Сначала поиск находит реальные места рядом, затем нейросеть пишет объяснение только по ним.")
+    u = resp.used_data
+    intent_obj = parse_query_intent(
+        req.query,
+        explicit_lang=req.lang,
+        now_iso=req.now_iso,
+        explicit_accessible=req.accessible,
+        explicit_group_size=req.group_size,
+        explicit_weather=req.weather,
     )
-else:
-    tab_cards, tab_route, tab_inspector = st.tabs(["Рекомендации", "Маршрут", "Как это работает"])
+    cands = retrieve(
+        req.query, u.rounded_coords[0], u.rounded_coords[1],
+        max_distance_m=req.max_distance_m, now_iso=req.now_iso, top_k=6,
+    )
+    st.markdown("**1. Что система поняла из запроса** (`used_data`)")
+    st.json(json.loads(u.model_dump_json()), expanded=True)
+    if cands:
+        st.markdown("**2. Кандидаты из поиска до генерации**")
+        st.dataframe(
+            pd.DataFrame([
+                {
+                    "Место": c.poi.name,
+                    "Категория": CATEGORY_RU.get(c.poi.category, c.poi.category),
+                    "Метры": c.distance_m,
+                    "Мин пешком": c.walk_min,
+                    "Совпадение": round(c.relevance, 2),
+                    "Часы": STATUS_STYLE.get(c.open_status, STATUS_STYLE["unknown"])[0],
+                    "id": c.poi.id,
+                }
+                for c in cands
+            ]),
+            use_container_width=True,
+            hide_index=True,
+        )
+    st.markdown("**3. Что ушло в нейросеть** (координат пользователя здесь нет)")
+    msgs = build_rag_messages(req.query, cands, intent_obj, lang=req.lang)
+    st.code(msgs[1]["content"], language="json", wrap_lines=True)
 
-    with tab_cards:
-        col_left, col_right = st.columns([1.2, 1], gap="large")
-        with col_left:
-            for idx, rec in enumerate(resp.recommendations, start=1):
-                render_card(idx, rec)
-        with col_right:
-            render_map()
 
-    with tab_route:
-        if resp.route:
-            rt = resp.route
-            st.markdown(f"#### {escape(rt.title)}")
+# ── Layout: rail | chat | side panel ─────────────────────────────────────────
+
+col_rail, col_chat, col_side = st.columns([0.055, 0.665, 0.28], gap=None)
+
+with col_rail:
+    with st.container(key="rail"):
+        _html("""
+            <div class="aw-rail">
+                <div class="aw-logo">A</div>
+                <div class="aw-rail-item active" title="Чат"><span class="msi">chat_bubble</span></div>
+                <div class="aw-rail-item" title="Карта"><span class="msi">map</span></div>
+                <div class="aw-rail-item" title="Маршруты"><span class="msi">route</span></div>
+                <div class="aw-rail-item" title="Места"><span class="msi">location_on</span></div>
+                <div class="aw-rail-item" title="Приватность"><span class="msi">shield_lock</span></div>
+                <div class="aw-rail-spacer"></div>
+                <div class="aw-rail-item" title="Настройки"><span class="msi">settings</span></div>
+                <div class="aw-avatar">Г</div>
+            </div>
+            """)
+
+with col_chat:
+    with st.container(key="chat"):
+        last_mode = None
+        if st.session_state.history:
+            last_mode = run_recommendations(st.session_state.history[-1]["req_json"]).used_data.generation_mode
+        mode_label = "нейросеть" if last_mode and "llm" in last_mode.lower() else "шаблоны"
+        _html(f"""
+            <div class="aw-head">
+                <div>
+                    <div class="aw-head-title">Astana Walk 🧭</div>
+                    <div class="aw-head-sub">Куда сходить в Астане прямо сейчас</div>
+                </div>
+                <div class="aw-pills">
+                    <span class="aw-pill"><span class="msi">location_on</span>{len(load_pois())} мест</span>
+                    <span class="aw-pill"><span class="msi">shield_lock</span>точка ~100 м</span>
+                    <span class="aw-pill"><span class="msi">auto_awesome</span>ответ: {mode_label}</span>
+                </div>
+            </div>
+            """)
+
+        messages = st.container(key="messages", height=700, border=False, autoscroll=True)
+        with st.container(key="composer"):
+            prompt = st.chat_input("Напишите, куда хочется сходить… например: тихое кафе с розеткой на час")
+        if prompt and prompt.strip():
+            _ask(prompt.strip())
+
+        with messages:
+            _html("""
+                <div class="aw-row">
+                    <div class="aw-bot-badge">AW</div>
+                    <div class="aw-bubble">
+                        Привет! Я Astana Walk — подскажу, куда сходить в Астане.
+                        Напишите, что хочется, или выберите готовый сценарий. Я подберу 1–3 реальных места рядом,
+                        покажу, сколько идти, открыто ли сейчас и чем там заняться.
+                    </div>
+                </div>
+                """)
+            history = st.session_state.history
+            for i, entry in enumerate(history):
+                req = RecommendRequest.model_validate_json(entry["req_json"])
+                render_user(entry, req)
+                latest = i == len(history) - 1
+                with st.spinner("Подбираю места…"):
+                    resp = run_recommendations(entry["req_json"])
+                render_answer(req, resp, latest=latest)
+
+with col_side:
+    with st.container(key="side"):
+        r_lat, r_lon = round_coords(st.session_state.lat, st.session_state.lon)
+        _html(f"""
+            <div class="aw-profile">
+                <div class="aw-avatar">Г<span class="aw-online"></span></div>
+                <div>
+                    <div class="aw-profile-name">Гость · без аккаунта</div>
+                    <div class="aw-profile-sub">Точка ~100 м: <span class="mono">{r_lat}, {r_lon}</span></div>
+                </div>
+            </div>
+            """)
+        tab_main, tab_settings = st.tabs(["Главное", "Настройки"])
+
+        with tab_main:
+            st.markdown('<div class="aw-side-title">Сценарии</div>', unsafe_allow_html=True)
+            with st.container(key="presets"):
+                for idx, preset in enumerate(OFFICIAL_PRESETS):
+                    st.button(
+                        preset["title"].split(". ", 1)[-1],
+                        key=f"btn_{preset['id']}",
+                        icon=PRESET_ICONS[idx % len(PRESET_ICONS)],
+                        on_click=run_preset,
+                        args=(preset,),
+                        use_container_width=True,
+                    )
+            if st.session_state.active_preset:
+                _html(f"""<style>.st-key-btn_{st.session_state.active_preset} button {{
+                        background: {ACCENT_SOFT} !important; border-left-color: {ACCENT} !important;
+                        font-weight: 600 !important; }}</style>""")
+            st.markdown('<div class="aw-side-sep"></div><div class="aw-side-title">Недавние запросы</div>',
+                        unsafe_allow_html=True)
+            history = st.session_state.history
+            if history:
+                rows = []
+                for i, entry in enumerate(reversed(history)):
+                    req_time = json.loads(entry["req_json"]).get("now_iso") or ""
+                    cls = "aw-recent current" if i == 0 else "aw-recent"
+                    rows.append(f'<div class="{cls}"><span>{escape(entry["query"])}</span>'
+                                f"<span>{req_time[11:16]}</span></div>")
+                st.markdown("".join(rows[:8]), unsafe_allow_html=True)
+            else:
+                st.markdown('<div class="aw-empty-side">Пока пусто. Задайте вопрос или выберите сценарий.</div>',
+                            unsafe_allow_html=True)
+
+        with tab_settings:
+            st.selectbox(
+                "Точка старта",
+                options=list(LANDMARK_POINTS.keys()) + [CUSTOM_POINT],
+                key="landmark",
+                on_change=apply_landmark,
+                help="Можно выбрать ориентир вместо GPS: так не нужно раскрывать, где вы находитесь.",
+            )
+            if st.session_state.landmark in LANDMARK_POINTS:
+                st.caption(LANDMARK_POINTS[st.session_state.landmark][2])
+            with st.expander("Точные координаты", expanded=st.session_state.landmark == CUSTOM_POINT):
+                c1, c2 = st.columns(2)
+                c1.number_input("Широта", key="lat", format="%.4f", step=0.002)
+                c2.number_input("Долгота", key="lon", format="%.4f", step=0.002)
+                st.caption(f"В логи и API попадает только округление до ~100 м: `{r_lat}, {r_lon}`")
+            st.slider("Радиус пешком, м", min_value=300, max_value=6000, step=100, key="max_distance_m")
+            d1, d2 = st.columns([1.15, 1])
+            d1.date_input("Дата", key="visit_date", format="DD.MM.YYYY")
+            d2.time_input("Время", key="visit_time", step=900)
+            st.caption("Время Астаны (UTC+5). Влияет на статус «открыто / закрыто».")
+            st.selectbox("Погода", options=list(WEATHER_LABELS), format_func=WEATHER_LABELS.get, key="weather")
+            g1, g2 = st.columns(2)
+            g1.number_input("Сколько человек", min_value=1, max_value=15, key="group_size")
+            g2.selectbox("Язык ответа", options=list(LANG_LABELS), format_func=LANG_LABELS.get, key="lang")
+            st.toggle("Без ступенек: коляска, дети", key="accessible")
+            st.toggle("Собрать маршрут из 2–3 мест", key="include_route")
+            st.toggle("Понимать ориентиры из текста запроса", key="auto_anchor",
+                      help="Например, «я возле Хан Шатыра» сдвинет точку старта к ТРЦ.")
             st.markdown(
-                f"""<div class="aw-route-head">
-                    <span>Всего <b>~{rt.total_duration_min} мин</b></span>
-                    <span>Пешком <b>{rt.total_distance_m} м · ~{rt.total_walk_min} мин</b></span>
-                    <span>На местах <b>~{rt.total_visit_min} мин</b></span>
-                </div>""",
+                f'<div class="aw-foot">Настройки применяются к следующему вопросу. '
+                f"База: {len(load_pois())} мест · OpenStreetMap + Visit Astana · поиск "
+                f'<span class="mono">{BACKEND}</span></div>',
                 unsafe_allow_html=True,
             )
-            st.caption(rt.summary)
-            for col, stop in zip(st.columns(len(rt.stops)), rt.stops):
-                s_label, s_fg, s_bg = STATUS_STYLE.get(stop.open_status, STATUS_STYLE["unknown"])
-                col.markdown(
-                    f"""
-                    <div class="aw-stop">
-                        <div class="aw-stop-stage">Шаг {stop.step} · {escape(stop.stage_note)}</div>
-                        <div class="aw-stop-name">{escape(stop.name)}</div>
-                        <div class="aw-stop-row"><span>Переход</span><b>{stop.from_prev_m} м · ~{stop.from_prev_walk_min} мин</b></div>
-                        <div class="aw-stop-row"><span>На месте</span><b>~{stop.visit_min} мин</b></div>
-                        <div class="aw-stop-row"><span>От старта</span><b>+{stop.arrival_offset_min}…+{stop.departure_offset_min} мин</b></div>
-                        <div style="margin-top:0.6rem;">
-                            <span class="aw-badge" style="color:{s_fg}; background:{s_bg};"
-                                  title="{escape(stop.open_reason)}">{s_label}</span>
-                        </div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True,
-                )
-        else:
-            st.info("Для маршрута нужно минимум 2 подходящих места в радиусе. Увеличьте радиус или включите маршрут слева.")
-
-    with tab_inspector:
-        st.markdown(
-            "Как устроен ответ: сначала поиск находит реальные места рядом, затем нейросеть "
-            "пишет объяснение только по ним. Ниже видно, что было на каждом шаге и что ушло в модель."
-        )
-        intent_obj = parse_query_intent(
-            req.query,
-            explicit_lang=req.lang,
-            now_iso=req.now_iso,
-            explicit_accessible=req.accessible,
-            explicit_group_size=req.group_size,
-            explicit_weather=req.weather,
-        )
-        cands = retrieve(
-            req.query,
-            u.rounded_coords[0],
-            u.rounded_coords[1],
-            max_distance_m=req.max_distance_m,
-            now_iso=req.now_iso,
-            top_k=6,
-        )
-        col_i1, col_i2 = st.columns(2, gap="large")
-        with col_i1:
-            st.markdown("**1. Что система поняла из запроса** (`used_data`)")
-            st.json(json.loads(resp.used_data.model_dump_json()), expanded=True)
-            if cands:
-                st.markdown("**2. Кандидаты из поиска до генерации**")
-                st.dataframe(
-                    pd.DataFrame([
-                        {
-                            "Место": c.poi.name,
-                            "Категория": CATEGORY_RU.get(c.poi.category, c.poi.category),
-                            "Метры": c.distance_m,
-                            "Мин пешком": c.walk_min,
-                            "Совпадение": round(c.relevance, 2),
-                            "Часы": STATUS_STYLE.get(c.open_status, STATUS_STYLE["unknown"])[0],
-                            "id": c.poi.id,
-                        }
-                        for c in cands
-                    ]),
-                    use_container_width=True,
-                    hide_index=True,
-                )
-        with col_i2:
-            st.markdown("**3. Что ушло в нейросеть** (координат пользователя здесь нет)")
-            msgs = build_rag_messages(req.query, cands, intent_obj, lang=req.lang)
-            st.code(msgs[1]["content"], language="json", wrap_lines=True)
-
-if resp.recommendations:
-    st.markdown(f'<div class="aw-disclaimer">{escape(resp.disclaimer)}</div>', unsafe_allow_html=True)
