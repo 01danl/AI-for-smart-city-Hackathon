@@ -224,11 +224,13 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .aw-privacy-strip {{ padding: 0 22px 14px 22px; border-bottom: 1px solid {LINE};
                      font-size: 0.75rem; color: {MUTED}; line-height: 1.45; }}
 .aw-privacy-strip .mono {{ color: {SUBTLE}; }}
-.st-key-side .stTabs {{ padding: 0 22px; }}
-.stTabs [data-baseweb="tab-list"] {{ gap: 20px; border-bottom: 1px solid {LINE}; }}
-.stTabs [data-baseweb="tab"] {{ padding: 10px 2px; font-weight: 600; color: {MUTED}; font-size: 0.88rem; }}
-.stTabs [aria-selected="true"] {{ color: {INK}; }}
-.stTabs [data-baseweb="tab-highlight"] {{ background: {ACCENT}; }}
+.st-key-side .st-key-side_view {{ padding: 0 22px 12px 22px; }}
+.st-key-side .st-key-side_view button {{ font-weight: 600; font-size: 0.86rem; border-radius: 9px; }}
+.st-key-rail .st-key-btn_rail_settings {{ display: flex; justify-content: center; }}
+.st-key-rail .st-key-btn_rail_settings button {{ width: 40px; min-width: 40px; height: 40px; padding: 0;
+    border: none; border-radius: 12px; background: transparent; color: {MUTED}; }}
+.st-key-rail .st-key-btn_rail_settings button:hover {{ background: {ACCENT_SOFT}; color: {ACCENT}; }}
+.st-key-rail .st-key-btn_rail_settings button p {{ display: none; }}
 .aw-side-title {{ font-weight: 700; color: {INK}; font-size: 0.98rem; margin: 14px 0 6px 0; }}
 .aw-side-sep {{ border-top: 1px solid {LINE}; margin: 14px -22px 0 -22px; }}
 
@@ -325,6 +327,11 @@ def run_preset(preset: dict) -> None:
     _ask(preset["query"], preset["id"])
 
 
+def open_settings() -> None:
+    """Rail gear callback: switch the right panel to the settings section."""
+    st.session_state.side_view = "Настройки"
+
+
 def apply_landmark() -> None:
     name = st.session_state.landmark
     if name in LANDMARK_POINTS:
@@ -337,6 +344,7 @@ if "history" not in st.session_state:
     st.session_state.lang = "ru"
     st.session_state.include_route = True
     st.session_state.auto_anchor = True
+    st.session_state.side_view = "Главное"
     _load_settings(OFFICIAL_PRESETS[0])
 
 
@@ -607,9 +615,18 @@ with col_rail:
                 <div class="aw-rail-item" title="Места"><span class="msi">location_on</span></div>
                 <div class="aw-rail-item" title="Приватность"><span class="msi">shield_lock</span></div>
                 <div class="aw-rail-spacer"></div>
-                <div class="aw-rail-item" title="Настройки"><span class="msi">settings</span></div>
             </div>
             """)
+        st.button(
+            "Настройки",
+            key="btn_rail_settings",
+            icon=":material/settings:",
+            help="Настройки прогулки: точка старта, радиус, время, погода",
+            on_click=open_settings,
+        )
+        if st.session_state.get("side_view") == "Настройки":
+            _html(f"""<style>.st-key-btn_rail_settings button {{
+                    background: {ACCENT_SOFT} !important; color: {ACCENT} !important; }}</style>""")
 
 with col_chat:
     with st.container(key="chat"):
@@ -666,9 +683,15 @@ with col_side:
                 Точные координаты не хранятся и не отправляются в модель.
             </div>
             """)
-        tab_main, tab_settings = st.tabs(["Главное", "Настройки"])
+        view = st.segmented_control(
+            "Раздел панели",
+            ["Главное", "Настройки"],
+            key="side_view",
+            label_visibility="collapsed",
+        )
+        view = view or "Главное"
 
-        with tab_main:
+        with st.container(key="view_main"):
             st.markdown('<div class="aw-side-title">Сценарии</div>', unsafe_allow_html=True)
             with st.container(key="presets"):
                 for idx, preset in enumerate(OFFICIAL_PRESETS):
@@ -699,7 +722,7 @@ with col_side:
                 st.markdown('<div class="aw-empty-side">Пока пусто. Задайте вопрос или выберите сценарий.</div>',
                             unsafe_allow_html=True)
 
-        with tab_settings:
+        with st.container(key="view_settings"):
             st.selectbox(
                 "Точка старта",
                 options=list(LANDMARK_POINTS.keys()) + [CUSTOM_POINT],
@@ -733,3 +756,8 @@ with col_side:
                 f'<span class="mono">{BACKEND}</span></div>',
                 unsafe_allow_html=True,
             )
+
+        # Both sections stay rendered (so widget state survives switching); only the
+        # inactive one is hidden. The gear button in the rail switches this same state.
+        hidden = "view_settings" if view != "Настройки" else "view_main"
+        _html(f"<style>.st-key-{hidden} {{ display: none; }}</style>")
