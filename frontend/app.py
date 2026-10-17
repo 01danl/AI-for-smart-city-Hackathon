@@ -143,8 +143,6 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
                  color: {MUTED}; }}
 .aw-rail-item.active {{ background: {ACCENT_SOFT}; color: {ACCENT}; }}
 .aw-rail-spacer {{ flex: 1; min-height: 340px; }}
-.aw-avatar {{ width: 38px; height: 38px; border-radius: 50%; display: grid; place-items: center;
-              background: #FDE7D8; color: #9A3412; font-weight: 700; font-size: 14px; }}
 
 /* Chat header */
 .aw-head {{ display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -223,13 +221,9 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
                                            border-radius: 10px !important; }}
 
 /* Right panel */
-.aw-profile {{ display: flex; align-items: center; gap: 12px; padding: 0 22px 16px 22px;
-               border-bottom: 1px solid {LINE}; }}
-.aw-profile .aw-avatar {{ position: relative; }}
-.aw-online {{ position: absolute; right: -1px; bottom: -1px; width: 10px; height: 10px; border-radius: 50%;
-              background: #12B76A; border: 2px solid #fff; }}
-.aw-profile-name {{ font-weight: 700; color: {INK}; font-size: 0.92rem; }}
-.aw-profile-sub {{ font-size: 0.78rem; color: {MUTED}; }}
+.aw-privacy-strip {{ padding: 0 22px 14px 22px; border-bottom: 1px solid {LINE};
+                     font-size: 0.75rem; color: {MUTED}; line-height: 1.45; }}
+.aw-privacy-strip .mono {{ color: {SUBTLE}; }}
 .st-key-side .stTabs {{ padding: 0 22px; }}
 .stTabs [data-baseweb="tab-list"] {{ gap: 20px; border-bottom: 1px solid {LINE}; }}
 .stTabs [data-baseweb="tab"] {{ padding: 10px 2px; font-weight: 600; color: {MUTED}; font-size: 0.88rem; }}
@@ -614,7 +608,6 @@ with col_rail:
                 <div class="aw-rail-item" title="Приватность"><span class="msi">shield_lock</span></div>
                 <div class="aw-rail-spacer"></div>
                 <div class="aw-rail-item" title="Настройки"><span class="msi">settings</span></div>
-                <div class="aw-avatar">Г</div>
             </div>
             """)
 
@@ -668,12 +661,9 @@ with col_side:
     with st.container(key="side"):
         r_lat, r_lon = round_coords(st.session_state.lat, st.session_state.lon)
         _html(f"""
-            <div class="aw-profile">
-                <div class="aw-avatar">Г<span class="aw-online"></span></div>
-                <div>
-                    <div class="aw-profile-name">Гость · без аккаунта</div>
-                    <div class="aw-profile-sub">Точка ~100 м: <span class="mono">{r_lat}, {r_lon}</span></div>
-                </div>
+            <div class="aw-privacy-strip">
+                Точка поиска: <span class="mono">{r_lat}, {r_lon}</span> — округлена до ~100 м.
+                Точные координаты не хранятся и не отправляются в модель.
             </div>
             """)
         tab_main, tab_settings = st.tabs(["Главное", "Настройки"])
