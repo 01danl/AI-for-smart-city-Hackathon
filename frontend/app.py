@@ -49,10 +49,10 @@ ACCENT = "#1F5F7A"
 
 # (label, text color, background)
 STATUS_STYLE: dict[str, tuple[str, str, str]] = {
-    "confirmed_open": ("Открыто по данным OSM", "#1E6B45", "#E6F2EA"),
+    "confirmed_open": ("Открыто по расписанию в базе", "#1E6B45", "#E6F2EA"),
     "likely_open": ("Скоро закроется", "#8A5A12", "#F7EEDC"),
     "unknown": ("Часы работы неизвестны", "#4F5661", "#ECEBE7"),
-    "likely_closed": ("Сейчас закрыто по данным OSM", "#9B2C2C", "#F7E4E2"),
+    "likely_closed": ("Закрыто по расписанию в базе", "#9B2C2C", "#F7E4E2"),
 }
 
 SOURCE_STYLE: dict[str, tuple[str, str]] = {
@@ -303,7 +303,7 @@ with st.sidebar:
               help="Например, «я возле Хан Шатыра» сдвинет точку старта к ТРЦ.")
 
     st.divider()
-    st.caption(f"База: {len(load_pois())} мест из OpenStreetMap · поиск `{BACKEND}`")
+    st.caption(f"База: {len(load_pois())} мест · OpenStreetMap + Visit Astana · поиск `{BACKEND}`")
 
 
 # ── Header and search ────────────────────────────────────────────────────────
@@ -430,6 +430,11 @@ def render_card(idx: int, rec) -> None:
         """,
         unsafe_allow_html=True,
     )
+    poi = load_pois().get(rec.poi_id)
+    if poi and poi.source.startswith("https://visitastana.kz/"):
+        st.caption(f"[Источник: Visit Astana]({poi.source}) · получено {poi.collected_at}")
+        if poi.description:
+            st.caption(poi.description)
 
 
 def render_map() -> None:

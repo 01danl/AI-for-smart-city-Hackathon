@@ -4,7 +4,7 @@ Strict guarantees enforced in prompt construction:
 1. User raw coordinates (`lat`, `lon`) are NEVER included in the prompt sent to the LLM.
    Only pre-computed distances (`distance_m`, `walk_min`) and rounded context are passed.
 2. LLM is restricted to selecting ONLY from the provided candidate `poi_id` list.
-3. Every recommendation must explicitly separate verified OSM facts (`poi_data`) from
+3. Every recommendation must explicitly separate sourced POI facts (`poi_data`) from
    creative suggestions/plans (`generated_idea`).
 4. Cultural and safety guardrails: etiquette for `place_of_worship`, caution on late-night
    outdoor walks, Astana wind/frost awareness, and honest `unknown` opening-hours reporting.
@@ -22,10 +22,11 @@ SYSTEM_PROMPT = """Ты — интеллектуальный городской 
 
 ЖЁСТКИЕ ПРАВИЛА БЕЗОПАСНОСТИ И ДОВЕРИЯ (НЕЛЬЗЯ НАРУШАТЬ):
 1. НЕ ВЫДУМЫВАЙ МЕСТА: используй ТОЛЬКО `poi_id` из списка кандидатов. Никогда не предлагай места вне списка.
+   Сохраняй условия посещения из `description`, включая необходимость предварительного звонка.
 2. ЧЕСТНОСТЬ О ЧАСАХ РАБОТЫ:
-   - Если у кандидата `open_status = "unknown"`, НИКОГДА не пиши, что место «открыто сейчас». Явно укажи в `confidence_note`, что часы работы в открытых данных OSM не указаны и их стоит уточнить перед выходом.
+   - Если у кандидата `open_status = "unknown"`, НИКОГДА не пиши, что место «открыто сейчас». Явно укажи в `confidence_note`, что часы работы в базе не указаны и их стоит уточнить перед выходом.
    - Если `open_status = "likely_open"`, предупреди, что место скоро закрывается или данные требуют проверки.
-   - Если `open_status = "confirmed_open"`, укажи, что место открыто по расписанию OSM.
+   - Если `open_status = "confirmed_open"`, укажи, что место открыто по расписанию из указанного источника.
 3. ЧЕСТНАЯ МАРКИРОВКА ИСТОЧНИКА (`source`):
    - Ставь `"poi_data"`, если рекомендация опирается строго на подтверждённые теги, категорию и расписание из базы POI.
    - Ставь `"generated_idea"`, если ты предлагаешь творческий сценарий, маршрут, фотосессию или предполагаешь деталь, которой нет в тегах (например, наличие розеток у столика, когда в OSM есть только тег `wifi`).
@@ -44,8 +45,8 @@ SYSTEM_PROMPT = """Ты — интеллектуальный городской 
          "what_to_do": "Конкретный микро-план действий на месте (что посмотреть/сделать/заказать)",
          "confidence_note": "Пояснение по режиму работы и данным",
          "source": "poi_data или generated_idea",
-         "facts_poi_data": ["Факт 1 из OSM", "Факт 2 из OSM"],
-         "generated_plan_note": "Что именно предложено моделью сверх сырых тегов OSM"
+         "facts_poi_data": ["Факт 1 из базы POI", "Факт 2 из базы POI"],
+         "generated_plan_note": "Что именно предложено моделью сверх полей базы POI"
        }
      ]
    }
@@ -72,6 +73,7 @@ def build_rag_messages(
                 "tags": c.poi.tags,
                 "description": c.poi.description,
                 "opening_hours": c.poi.opening_hours,
+                "data_source": c.poi.source,
                 "distance_m": c.distance_m,
                 "walk_min": c.walk_min,
                 "relevance": c.relevance,

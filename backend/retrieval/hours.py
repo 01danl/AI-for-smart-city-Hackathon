@@ -150,14 +150,14 @@ def open_status(hours: str | None, now_iso: str | None = None) -> tuple[OpenStat
     for start, end in candidates:
         if start <= minute < end:
             if end - start >= 1440:
-                return "confirmed_open", f"Круглосуточно по данным OSM ({hours})"
+                return "confirmed_open", f"Круглосуточно по расписанию в базе ({hours})"
             left = end - minute
             if left <= CLOSING_SOON_MIN:
                 return "likely_open", f"Закрывается примерно через {left} мин ({hours})"
-            return "confirmed_open", f"Открыто по расписанию из OSM ({hours})"
+            return "confirmed_open", f"Открыто по расписанию в базе ({hours})"
 
     # In OSM syntax, days not listed are closed.
-    return "likely_closed", f"Сейчас вне часов работы по данным OSM ({hours})"
+    return "likely_closed", f"Сейчас вне часов работы по расписанию в базе ({hours})"
 
 
 def check_visit_window(
