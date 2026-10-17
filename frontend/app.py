@@ -20,6 +20,11 @@ import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
+try:  # optional runtime helper: accesses navigator.geolocation in the browser
+    from streamlit_js_eval import get_geolocation as _js_get_geolocation
+except ImportError:  # without it the app still works: landmarks + manual coords
+    _js_get_geolocation = None
+
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
@@ -152,6 +157,15 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
     border: none; background: transparent; color: {MUTED}; border-radius: 8px; }}
 .st-key-btn_close_settings button:hover {{ background: #FDECEA; color: #B42318; }}
 .st-key-btn_close_settings button p {{ display: none; }}
+
+/* Find-my-location button (first control in the drawer) */
+.st-key-btn_geo {{ margin: 8px 0 2px; }}
+.st-key-btn_geo button {{ width: 100%; justify-content: center; border: 1px solid {LINE};
+    background: {PANEL}; border-radius: 10px; font-weight: 600; font-size: 0.85rem; color: {INK}; }}
+.st-key-btn_geo button:hover {{ border-color: {ACCENT}; color: {ACCENT}; }}
+.st-key-btn_geo button[disabled] {{ opacity: .55; }}
+/* the geolocation component itself is invisible plumbing */
+[class*="st-key-geo_request_"] {{ display: none; }}
 
 /* Sidebar (ChatGPT-style) */
 .aw-logo {{ width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
@@ -400,6 +414,14 @@ def _restore_settings_state() -> None:
                 ss[key] = backup[key]
 
 
+def _ss_get(key: str, default=None):
+    """Read a plain session key without failing when it was never set."""
+    try:
+        return st.session_state[key]
+    except KeyError:
+        return default
+
+
 def new_chat() -> None:
     """Sidebar callback: go to a blank chat; it joins the history on the first question."""
     st.session_state.active_convo = None
@@ -444,6 +466,31 @@ def apply_landmark() -> None:
     name = st.session_state.landmark
     if name in LANDMARK_POINTS:
         st.session_state.lat, st.session_state.lon, _ = LANDMARK_POINTS[name]
+
+
+def request_geolocation() -> None:
+    """Find-my-location callback: bump the counter so the drawer re-mounts the JS fix."""
+    st.session_state.geo_click = int(_ss_get("geo_click", 0)) + 1
+
+
+def _apply_geo_result(loc: dict, geo_key: str) -> str | None:
+    """Store a browser location fix into the settings: round at once, keep no raw values."""
+    ss = st.session_state
+    coords = (loc or {}).get("coords") or {}
+    try:
+        r_lat, r_lon = round_coords(float(coords["latitude"]), float(coords["longitude"]))
+    except (KeyError, TypeError, ValueError):
+        err = (loc or {}).get("error") or {}
+        msg = str(err.get("message") or err.get("code") or "доступ запрещён браузером")
+        return f"Браузер не дал координаты ({msg}) — выберите ориентир или введите их вручную."
+    ss.lat = r_lat
+    ss.lon = r_lon
+    ss.landmark = CUSTOM_POINT
+    ss.geo_click = 0            # the fix is applied: stop polling GPS on later reruns
+    ss.geo_applied_for = None   # ...and drop the guard with it
+    acc = coords.get("accuracy")
+    tail = f" · точность ±{int(float(acc))} м" if acc else ""
+    return f"Точка старта из геолокации: ~{r_lat}, {r_lon}{tail} · сырые координаты не сохраняем"
 
 
 if "convos" not in st.session_state:
@@ -879,12 +926,34 @@ if col_settings is not None:
                     use_container_width=True,
                     help="Свернуть панель настроек",
                 )
+            st.button(
+                "Найти мою геолокацию",
+                key="btn_geo",
+                icon=":material/my_location:",
+                on_click=request_geolocation,
+                use_container_width=True,
+                help="Браузер запросит разрешение; координаты сразу округляем до ~100 м, сырые не сохраняем.",
+                disabled=_js_get_geolocation is None,
+            )
+            _geo_click = int(_ss_get("geo_click", 0))
+            _geo_key = f"geo_request_{_geo_click}"
+            _geo_note = None
+            if _js_get_geolocation is None:
+                _geo_note = "Геолокация недоступна (нет компонента) — выберите ориентир или введите координаты."
+            elif _geo_click and _ss_get("geo_applied_for") != _geo_key:
+                _fix = _js_get_geolocation(component_key=_geo_key)
+                if _fix is None:
+                    _geo_note = "Ждём разрешение браузера и координаты…"
+                else:
+                    _geo_note = _apply_geo_result(_fix, _geo_key)
+            if _geo_note:
+                st.caption(_geo_note)
             st.selectbox(
                 "Точка старта",
                 options=list(LANDMARK_POINTS.keys()) + [CUSTOM_POINT],
                 key="landmark",
                 on_change=apply_landmark,
-                help="Можно выбрать ориентир вместо GPS: так не нужно раскрывать, где вы находитесь.",
+                help="Ориентир вместо геолокации: так не нужно раскрывать, где вы находитесь.",
             )
             if st.session_state.landmark in LANDMARK_POINTS:
                 st.caption(LANDMARK_POINTS[st.session_state.landmark][2])
