@@ -1,10 +1,10 @@
 <div align="center">
 
-# Astana Walk AI ИИ-помощник по прогулкам в Астане
+# Astana Walk AI — ИИ-помощник по прогулкам в Астане
 
 **Hybrid Geosemantical RAG:** реальные места из OpenStreetMap + Visit Astana, честные источники, ноль выдуманных кофейен
 
-**Хакатон:** Build with AI (Школа ИИ и науки о данных) · **Трек 1** задача от НИЦ Smart City и GDG Astana
+**Хакатон:** Build with AI (Школа ИИ и науки о данных) · **Трек 1** — задача от НИЦ Smart City и GDG Astana
 
 | ![Python 3.11+](https://img.shields.io/badge/Python%203.11%2B-3776AB?style=flat-square&logo=python&logoColor=white) | ![Streamlit](https://img.shields.io/badge/Streamlit%20UI-FF4B4B?style=flat-square&logo=streamlit&logoColor=white) | ![FastAPI](https://img.shields.io/badge/FastAPI%20API-009688?style=flat-square&logo=fastapi&logoColor=white) | ![ChromaDB + BM25](https://img.shields.io/badge/ChromaDB%20%2B%20BM25-4A154B?style=flat-square) | ![OpenRouter LLM](https://img.shields.io/badge/LLM-openrouter.ai-8A2BE2?style=flat-square) | ![OSM Data](https://img.shields.io/badge/Data-OpenStreetMap-7EBC6F?style=flat-square&logo=openstreetmap&logoColor=white) | ![pytest](https://img.shields.io/badge/Tests-pytest-0A9EDC?style=flat-square&logo=pytest&logoColor=white) |
 |:---:|:---:|:---:|:---:|:---:|:---:|:---:|
@@ -15,7 +15,7 @@
 
 ---
 
-Система отвечает на запросы вида *«Я возле Mega Silk Way, у меня 30–60 минут   куда пойти?»*: находит реальные места рядом (**975 POI**), объясняет «почему», считает время пешком, предупреждает «закроется во время прогулки», строит пешую цепочку из 2–3 точек и в каждой карточке честно разделяет `[poi_data]` (факты базы) и `[generated_idea]` (идеи ИИ). Координаты пользователя никогда не сохраняются и не передаются в LLM   только округление до ~100 м.
+Система отвечает на запросы вида *«Я возле Mega Silk Way, у меня 30–60 минут — куда пойти?»*: находит реальные места рядом (**975 POI**), объясняет «почему», считает время пешком, предупреждает «закроется во время прогулки», строит пешую цепочку из 2–3 точек и в каждой карточке честно разделяет `[poi_data]` (факты базы) и `[generated_idea]` (идеи ИИ). Координаты пользователя никогда не сохраняются и не передаются в LLM — только округление до ~100 м.
 
 ```bash
 # Проверка перед защитой: тесты + демо одной строкой
@@ -48,7 +48,7 @@ uv sync --locked && uv run python -m pytest tests -q && uv run streamlit run fro
 ### 2️⃣ Контекстуальность: климат Астаны и окно визита
 
 - Парсер намерений [`backend/retrieval/intent.py`](backend/retrieval/intent.py) распознаёт **якорные ориентиры в тексте** (*«возле Mega Silk Way»*, *«у здания Экспо 2017»*), **бюджет времени** (*«на 30–60 минут»*, *«2 часа перед вылетом»*) и **погодный контекст Астаны** (мороз/ветер → приоритет тёплым локациям `indoor`).
-- Умная проверка графика работы [`backend/retrieval/hours.py`](backend/retrieval/hours.py) в тайм-зоне Астаны (`UTC+5`) проверяет не только минуту старта, но и **окно визита** (`walk_min + visit_min`)   место не закроется во время прогулки.
+- Умная проверка графика работы [`backend/retrieval/hours.py`](backend/retrieval/hours.py) в тайм-зоне Астаны (`UTC+5`) проверяет не только минуту старта, но и **окно визита** (`walk_min + visit_min`) — место не закроется во время прогулки.
 
 ### 3️⃣ Честные ответы: ноль галлюцинаций, явные источники
 
@@ -62,12 +62,12 @@ uv sync --locked && uv run python -m pytest tests -q && uv run streamlit run fro
 
 ### 5️⃣ Privacy-by-Design и отказоустойчивость демо
 
-- Координаты пользователя не сохраняются и **не отправляются в промпт LLM** (автотест `test_prompt_never_leaks_raw_user_coordinates`). В логах и UI   только округление до ~100 м (`round_coords`).
-- Если нет `OPENROUTER_API_KEY` или сеть недоступна   автоматически включается детерминированный генератор (`smart_fallback`): демо и API отвечают в любых условиях.
+- Координаты пользователя не сохраняются и **не отправляются в промпт LLM** (автотест `test_prompt_never_leaks_raw_user_coordinates`). В логах и UI — только округление до ~100 м (`round_coords`).
+- Если нет `OPENROUTER_API_KEY` или сеть недоступна — автоматически включается детерминированный генератор (`smart_fallback`): демо и API отвечают в любых условиях.
 
 ---
 
-## 🏗️ Архитектура   как работает RAG
+## 🏗️ Архитектура — как работает RAG
 
 <div align="center">
 
@@ -84,7 +84,7 @@ flowchart LR
 
 </div>
 
-Подробное описание пяти этапов конвейера и формулу ранжирования   [`docs/rag_approach.md`](docs/rag_approach.md). Кратко:
+Подробное описание пяти этапов конвейера и формулу ранжирования — [`docs/rag_approach.md`](docs/rag_approach.md). Кратко:
 
 | Этап | Модуль | Суть |
 |:---|:---|:---|
@@ -119,9 +119,9 @@ RETRIEVAL_BACKEND=auto        # chroma (если собран) → иначе bm
 uv run streamlit run frontend/app.py --server.address 127.0.0.1 --server.port 8501
 ```
 
-Откройте http://127.0.0.1:8501   слева сайдбар с историей чатов и сценариями жюри, по центру чат с картой и RAG-инспектором, настройки прогулки открываются шестерёнкой в правом верхнем углу (панель справа).
+Откройте http://127.0.0.1:8501 — слева сайдбар с историей чатов и сценариями жюри, по центру чат с картой и RAG-инспектором, панель настроек справа открыта по умолчанию (сворачивается шестерёнкой в правом верхнем углу).
 
-### 2. Запуск REST API (FastAPI)   второй терминал
+### 2. Запуск REST API (FastAPI) — второй терминал
 
 ```bash
 uv run uvicorn backend.api.app:app --host 127.0.0.1 --port 8000
@@ -131,7 +131,7 @@ uv run uvicorn backend.api.app:app --host 127.0.0.1 --port 8000
 curl -X POST http://localhost:8000/recommend \
   -H "Content-Type: application/json" \
   -d '{
-    "query": "Я сейчас возле Mega Silk Way, хочу прогуляться 30–60 минут   что посоветуете?",
+    "query": "Я сейчас возле Mega Silk Way, хочу прогуляться 30–60 минут — что посоветуете?",
     "lat": 51.0891,
     "lon": 71.4073,
     "max_distance_m": 2500,
@@ -149,7 +149,7 @@ uv run python -m pytest tests -q
 <details>
 <summary><b>Опционально: пересборка данных OSM и векторного индекса Chroma</b></summary>
 
-В репозитории уже лежит готовый датасет `data/poi.json` (975 POI)   без индекса приложение работает через BM25. Чтобы пересобрать всё с нуля:
+В репозитории уже лежит готовый датасет `data/poi.json` (975 POI) — без индекса приложение работает через BM25. Чтобы пересобрать всё с нуля:
 
 ```bash
 uv run python scripts/collect_osm.py                  # необязательно: свежий запрос в Overpass API
@@ -157,12 +157,12 @@ uv sync --locked --extra vector
 uv run --extra vector python scripts/build_index.py   # индекс в data/chroma/
 ```
 
-Локальные эмбеддинги считает `sentence-transformers`   первый запуск скачивает модель.
+Локальные эмбеддинги считает `sentence-transformers` — первый запуск скачивает модель.
 
 </details>
 
 <details>
-<summary><b>Официальное дополнение данных   Visit Astana</b></summary>
+<summary><b>Официальное дополнение данных — Visit Astana</b></summary>
 
 9 новых мест с официального портала Visit Astana: названия и координаты извлечены из карточек, 7 расписаний перенесены с учётом выходных и обеденных перерывов. [Источники и ограничения](docs/official_data_collection.md), [ссылки и подтверждения полей](data/poi_sources.json).
 
@@ -185,7 +185,7 @@ uv run python scripts/collect_official_poi.py --apply      # применить 
 | `GET` | `/presets` | 6 пресетов жюри (координаты, радиусы, запросы) для UI и демо |
 | `GET` | `/pois/stats` | Сводка по датасету (количество POI по категориям и источникам) |
 
-Фрагмент ответа `POST /recommend` (полный контракт   [`docs/data_dictionary.md`](docs/data_dictionary.md)):
+Фрагмент ответа `POST /recommend` (полный контракт — [`docs/data_dictionary.md`](docs/data_dictionary.md)):
 
 ```jsonc
 {
@@ -203,7 +203,7 @@ uv run python scripts/collect_official_poi.py --apply      # применить 
       "visit_min": 45,
       "why": "В двух шагах, тег wifi подтверждён в OSM, внутри обычно тихо",
       "what_to_do": "Возьмите кофе у окна и поработайте: план визита сгенерирован ИИ",
-      "open_status": "unknown",                   // часы в OSM не указаны   «открыто!» не пишем
+      "open_status": "unknown",                   // часы в OSM не указаны — «открыто!» не пишем
       "confidence_note": "Часы работы не указаны в данных",
       "source": "poi_data"
     }
@@ -213,7 +213,7 @@ uv run python scripts/collect_official_poi.py --apply      # применить 
     "total_duration_min": 85,
     "stops": [ "…2–3 точки с переходами и статусами…" ]
   },
-  "disclaimer": "Место и расстояния   факты базы; план визита   идея ИИ."
+  "disclaimer": "Место и расстояния — факты базы; план визита — идея ИИ."
 }
 ```
 
@@ -241,7 +241,7 @@ uv run python scripts/collect_official_poi.py --apply      # применить 
 
 ## 📸 Скриншоты
 
-> 🖼 **Место под скриншоты   добавьте свои кадры.** Папка `docs/img/` уже создана; названия файлов уже прописаны в закомментированных блоках ниже   положите файлы и раскомментируйте блоки (удалите `<!--` и `-->`). Снять можно так: `⌘⇧4` на macOS поверх демо на http://127.0.0.1:8501.
+> 🖼 **Место под скриншоты — добавьте свои кадры.** Папка `docs/img/` уже создана; названия файлов уже прописаны в закомментированных блоках ниже — положите файлы и раскомментируйте блоки (удалите `<!--` и `-->`). Снять можно так: `⌘⇧4` на macOS поверх демо на http://127.0.0.1:8501.
 
 | # | Что снять | Куда положить |
 |:---:|:---|:---|
@@ -254,27 +254,27 @@ uv run python scripts/collect_official_poi.py --apply      # применить 
 
 <!--
 <p align="center">
-  <img src="docs/img/01-ui-chat.png" alt="Astana Walk   главный экран с историей чатов" width="900">
+  <img src="docs/img/01-ui-chat.png" alt="Astana Walk — главный экран с историей чатов" width="900">
 </p>
 
 <p align="center">
-  <img src="docs/img/02-cards.png" alt="Astana Walk   карточки с честной маркировкой источников" width="900">
+  <img src="docs/img/02-cards.png" alt="Astana Walk — карточки с честной маркировкой источников" width="900">
 </p>
 
 <p align="center">
-  <img src="docs/img/03-map-route.png" alt="Astana Walk   карта: зона приватности и маршрут" width="900">
+  <img src="docs/img/03-map-route.png" alt="Astana Walk — карта: зона приватности и маршрут" width="900">
 </p>
 
 <p align="center">
-  <img src="docs/img/04-inspector.png" alt="Astana Walk   RAG-инспектор" width="900">
+  <img src="docs/img/04-inspector.png" alt="Astana Walk — RAG-инспектор" width="900">
 </p>
 
 <p align="center">
-  <img src="docs/img/05-api.png" alt="Astana Walk   ответ REST API" width="700">
+  <img src="docs/img/05-api.png" alt="Astana Walk — ответ REST API" width="700">
 </p>
 
 <p align="center">
-  <img src="docs/img/06-tests.png" alt="Astana Walk   зелёный pytest" width="700">
+  <img src="docs/img/06-tests.png" alt="Astana Walk — зелёный pytest" width="700">
 </p>
 -->
 
@@ -285,7 +285,7 @@ uv run python scripts/collect_official_poi.py --apply      # применить 
 | Метрика | Значение |
 |:---|:---|
 | Всего мест (POI) | **975**: 966 OpenStreetMap (срез 16.10.2026) + 9 Visit Astana |
-| Часы работы заполнены | ≈ 35% мест (у остальных   честный `unknown`) |
+| Часы работы заполнены | ≈ 35% мест (у остальных — честный `unknown`) |
 | Категории | кафе, рестораны, музеи, парки, достопримечательности, спорт, ТРЦ и др. |
 | Часовой пояс проверки режима работы | Астана, **UTC+5** |
 | Языки ответа | `ru` / `kk` / `en` |
@@ -295,12 +295,12 @@ uv run python scripts/collect_official_poi.py --apply      # применить 
 
 ## 🔒 Этика и приватность
 
-- **Локация не хранится**   используется только на время одного запроса, чтобы посчитать расстояния.
-- **Логи и UI**   только `rounded_100m` (3 знака после запятой ≈ 110 м); точный адрес восстановить нельзя.
-- **Точные координаты не идут в LLM**   в промпт передаются лишь предрассчитанные расстояния; это закреплено автотестом.
-- **Нет данных о часах → статус `unknown`**   система не утверждает «сейчас открыто» без источника.
-- **Факты и генерация разделены**   каждая карточка показывает, что взято из базы (`[poi_data]`), а что придумано моделью (`[generated_idea]`).
-- Полный текст   [`docs/ethics_privacy.md`](docs/ethics_privacy.md).
+- **Локация не хранится** — используется только на время одного запроса, чтобы посчитать расстояния.
+- **Логи и UI** — только `rounded_100m` (3 знака после запятой ≈ 110 м); точный адрес восстановить нельзя.
+- **Точные координаты не идут в LLM** — в промпт передаются лишь предрассчитанные расстояния; это закреплено автотестом.
+- **Нет данных о часах → статус `unknown`** — система не утверждает «сейчас открыто» без источника.
+- **Факты и генерация разделены** — каждая карточка показывает, что взято из базы (`[poi_data]`), а что придумано моделью (`[generated_idea]`).
+- Полный текст — [`docs/ethics_privacy.md`](docs/ethics_privacy.md).
 
 ---
 
@@ -325,7 +325,7 @@ uv run python scripts/collect_official_poi.py --apply      # применить 
 | **Daniyal Bissenov** | Генерация, API, UI (Роль B) | [`frontend/`](frontend/), [`backend/api/`](backend/api/), [`backend/generation/`](backend/generation/) |
 | **Yelzhan** | Данные, поиск, маршруты (Роль A) | [`data/`](data/), [`backend/retrieval/`](backend/retrieval/), [`scripts/`](scripts/) |
 
-*(Если распределение ролей отличается   поправьте таблицу.)*
+*(Если распределение ролей отличается — поправьте таблицу.)*
 
 ---
 

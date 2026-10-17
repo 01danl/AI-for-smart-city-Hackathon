@@ -1,8 +1,8 @@
 """Streamlit demo UI for Astana Walk AI (Build with AI · Smart City Track).
 
 ChatGPT-style layout: left sidebar with "Новый чат", scenario shortcuts and a
-revisitable conversation history; the chat in the middle; a settings drawer on
-the right, opened from the gear in the chat header's top-right corner.
+revisitable conversation history; the chat in the middle; the right settings
+drawer is open by default and the gear in the chat header toggles it.
 
 Launch with:
     streamlit run frontend/app.py
@@ -361,6 +361,45 @@ def _convo_label(convo: dict, limit: int = 24) -> str:
     return f"{label} · {time_str}" if time_str else label
 
 
+# Widget keys inside the settings drawer. Streamlit drops widget-keyed session
+# state on the rerun right after the drawer is hidden, so a plain-dict backup
+# (never garbage-collected) restores them when the drawer opens again.
+_SETTING_KEYS = (
+    "landmark", "lat", "lon", "max_distance_m", "visit_date", "visit_time",
+    "weather", "group_size", "lang", "accessible", "include_route", "auto_anchor",
+)
+
+
+def _sync_settings_backup() -> None:
+    """Persist the latest settings values into a non-widget session key."""
+    ss = st.session_state
+    try:
+        backup = ss["_settings_backup"]
+    except KeyError:
+        backup = {}
+        ss["_settings_backup"] = backup
+    for key in _SETTING_KEYS:
+        try:
+            backup[key] = ss[key]
+        except KeyError:
+            pass
+
+
+def _restore_settings_state() -> None:
+    """Re-seed widget state from the backup before the drawer is rendered."""
+    ss = st.session_state
+    try:
+        backup = ss["_settings_backup"]
+    except KeyError:
+        return
+    for key in _SETTING_KEYS:
+        try:
+            ss[key]
+        except KeyError:
+            if key in backup:
+                ss[key] = backup[key]
+
+
 def new_chat() -> None:
     """Sidebar callback: go to a blank chat; it joins the history on the first question."""
     st.session_state.active_convo = None
@@ -412,7 +451,7 @@ if "convos" not in st.session_state:
     st.session_state.active_convo = None  # id открытого чата; None = пустой, как в ChatGPT
     st.session_state.next_convo_id = 1
     st.session_state.active_preset = None
-    st.session_state.show_settings = False
+    st.session_state.show_settings = True
     st.session_state.lang = "ru"
     st.session_state.include_route = True
     st.session_state.auto_anchor = True
@@ -681,6 +720,9 @@ else:
     col_settings = None
     col_side, col_chat = st.columns([0.235, 0.765], gap=None)
 
+# Keep settings state alive across drawer open/close cycles (see _SETTING_KEYS).
+_sync_settings_backup()
+_restore_settings_state()
 r_lat, r_lon = round_coords(st.session_state.lat, st.session_state.lon)
 
 with col_side:
@@ -784,7 +826,7 @@ with col_chat:
                     key="btn_gear",
                     icon=":material/settings:",
                     on_click=toggle_settings,
-                    help="Настройки прогулки: точка старта, радиус, время, погода — панель справа",
+                    help="Свернуть или раскрыть панель настроек (точка старта, радиус, время, погода)",
                 )
         if st.session_state.show_settings:
             _html(f"""<style>.st-key-btn_gear button {{
