@@ -1,6 +1,6 @@
 """Streamlit demo UI for Astana Walk AI (Build with AI · Smart City Track).
 
-ChatGPT-style layout: left sidebar with "Новый чат", scenario shortcuts and a
+ChatGPT-style layout: left sidebar with "New chat", a ru/kk/en switcher, scenario shortcuts and a
 revisitable conversation history; the chat in the middle; the right settings
 panel shows the map of the latest answer; the gear in the chat header swaps it
 for the settings drawer.
@@ -60,9 +60,24 @@ from backend.retrieval.geo import round_coords  # noqa: E402
 from backend.retrieval.index import load_pois  # noqa: E402
 from frontend.geolocation import GEOLOCATION_JS, geolocation_error  # noqa: E402
 from frontend.voice_input import transcribe_question  # noqa: E402
+from frontend.i18n import (  # noqa: E402
+    LANG_SHORT,
+    LANGS,
+    category_label,
+    geo_error,
+    landmark_name,
+    landmark_note,
+    norm_lang,
+    preset_query,
+    preset_title,
+    source_label,
+    status_label,
+    t,
+    weather_label,
+)
 
 st.set_page_config(
-    page_title="Astana Walk · прогулки по Астане",
+    page_title="Astana Walk",
     page_icon=LOGO_MARK,
     layout="wide",
     initial_sidebar_state="collapsed",
@@ -115,23 +130,11 @@ STATUS_RGB: dict[str, list[int]] = {
     "likely_closed": [180, 35, 24, 235],
 }
 
-CATEGORY_RU: dict[str, str] = {
-    "cafe": "Кафе", "restaurant": "Ресторан", "fast_food": "Фастфуд", "bar": "Бар",
-    "mall": "Торговый центр", "park": "Парк", "sport": "Спорт", "monument": "Памятник",
-    "attraction": "Достопримечательность", "place_of_worship": "Мечеть / храм",
-    "artwork": "Арт-объект", "cinema": "Кинотеатр", "theatre": "Театр", "library": "Библиотека",
-    "museum": "Музей", "bookstore": "Книжный", "arts_centre": "Культурный центр",
-    "stadium": "Стадион", "gallery": "Галерея", "theme_park": "Парк развлечений",
-    "exhibition": "Выставочный центр", "viewpoint": "Смотровая площадка", "zoo": "Зоопарк",
-}
-
 WEATHER_LABELS = {
     "normal": "Комфортная погода",
     "cold_windy": "Мороз или сильный ветер",
     "rain_snow": "Дождь или снег",
 }
-
-LANG_LABELS = {"ru": "Русский", "kk": "Қазақша", "en": "English"}
 
 # Material icon per jury scenario, in OFFICIAL_PRESETS order.
 PRESET_ICONS = [
@@ -156,11 +159,11 @@ MAX_HISTORY = 12
 
 CSS = f"""
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Rounded:opsz,wght,FILL,GRAD@20..24,400,0,0');
 
 html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
-    font-family: 'Plus Jakarta Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-family: 'Onest', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
 }}
 .mono {{ font-family: 'JetBrains Mono', ui-monospace, monospace; }}
 .msi {{ font-family: 'Material Symbols Rounded'; font-size: 21px; line-height: 1; font-weight: 400;
@@ -387,6 +390,33 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 st.html(CSS)
 
 
+# ── Language ─────────────────────────────────────────────────────────────────
+
+
+def L() -> str:
+    """Current interface language; it is also the answer and speech language."""
+    return norm_lang(st.session_state.get("lang"))
+
+
+def _status(status: str) -> tuple[str, str, str]:
+    """(localized label, text color, background) for an opening-hours status."""
+    _, fg, bg = STATUS_STYLE.get(status, STATUS_STYLE["unknown"])
+    return status_label(status, L()), fg, bg
+
+
+def _source(source: str) -> tuple[str, str]:
+    code = source if source in SOURCE_STYLE else "poi_data"
+    return source_label(code, L()), code
+
+
+def set_language() -> None:
+    """Language switcher callback: interface, answers and speech follow the choice."""
+    ss = st.session_state
+    if ss.get("ui_lang") not in LANGS:  # the segmented control can be cleared
+        ss.ui_lang = L()
+    ss.lang = ss.ui_lang
+
+
 # ── State ────────────────────────────────────────────────────────────────────
 
 
@@ -443,7 +473,7 @@ def _active_or_new_convo() -> dict:
     for convo in ss.convos:
         if convo["id"] == ss.active_convo:
             return convo
-    convo = {"id": ss.next_convo_id, "title": "Новый чат", "entries": []}
+    convo = {"id": ss.next_convo_id, "title": t("new_chat", L()), "entries": []}
     ss.next_convo_id += 1
     ss.convos.append(convo)
     ss.active_convo = convo["id"]
@@ -464,7 +494,7 @@ def _convo_label(convo: dict, limit: int = 24) -> str:
 # (never garbage-collected) restores them when the drawer opens again.
 _SETTING_KEYS = (
     "landmark", "lat", "lon", "max_distance_m", "visit_date", "visit_time",
-    "weather", "group_size", "lang", "accessible", "include_route", "auto_anchor",
+    "weather", "group_size", "accessible", "include_route", "auto_anchor",
 )
 
 
@@ -575,7 +605,7 @@ def run_preset(preset: dict) -> None:
     st.session_state.start_source = "landmark" if st.session_state.landmark in LANDMARK_POINTS else "custom"
     st.session_state.geo_note = None
     _sync_settings_backup()
-    _ask(preset["query"], preset["id"])
+    _ask(preset_query(preset, L()), preset["id"])
 
 
 def apply_landmark() -> None:
@@ -597,11 +627,11 @@ def start_label() -> str:
     """Human name of the point the next question will search around."""
     ss = st.session_state
     if ss.landmark in LANDMARK_POINTS:
-        return ss.landmark
+        return landmark_name(ss.landmark, L())
     if _ss_get("start_source") == "geo":
-        return "ваша геолокация"
+        return t("start_geo", L())
     r_lat, r_lon = round_coords(ss.lat, ss.lon)
-    return f"точка {r_lat}, {r_lon}"
+    return t("start_coords", L(), lat=r_lat, lon=r_lon)
 
 
 def request_geolocation() -> None:
@@ -627,7 +657,8 @@ def _apply_geo_result(loc: dict, geo_key: str) -> str | None:
         r_lat, r_lon = round_coords(lat, lon)
     except (KeyError, TypeError, ValueError):
         err = loc.get("error") if isinstance(loc, dict) else None
-        ss.geo_note = geolocation_error(err.get("code") if isinstance(err, dict) else None)
+        code = err.get("code") if isinstance(err, dict) else None
+        ss.geo_note = geo_error(code, L(), geolocation_error(code))
         return ss.geo_note
     ss.lat = r_lat
     ss.lon = r_lon
@@ -635,10 +666,10 @@ def _apply_geo_result(loc: dict, geo_key: str) -> str | None:
     ss.start_source = "geo"
     try:
         acc = float(coords.get("accuracy"))
-        tail = f" · точность браузера ±{math.ceil(acc)} м" if math.isfinite(acc) and acc > 0 else ""
+        tail = t("geo_accuracy", L(), acc=math.ceil(acc)) if math.isfinite(acc) and acc > 0 else ""
     except (TypeError, ValueError):
         tail = ""
-    ss.geo_note = f"Ищу рядом с вашей геолокацией: ~{r_lat}, {r_lon}{tail} · округлено до ~100 м"
+    ss.geo_note = t("geo_ok", L(), lat=r_lat, lon=r_lon, tail=tail)
     _sync_settings_backup()
     return ss.geo_note
 
@@ -656,7 +687,7 @@ def _clear_voice_note() -> None:
 
 def _ask_by_voice(wav: bytes) -> None:
     """Transcribe a recorded question and ask it, or leave a status note on failure."""
-    text, note = transcribe_question(wav, _server_transcribe)
+    text, note = transcribe_question(wav, _server_transcribe, lang=L())
     st.session_state.mic_state = ("sent" if text else "error", note)
     if text:
         _ask(text, via="voice")
@@ -670,6 +701,7 @@ if "convos" not in st.session_state:
     st.session_state.show_settings = False  # right panel shows the map; gear opens settings
     st.session_state.start_source = "landmark"  # landmark | geo | custom
     st.session_state.lang = "ru"
+    st.session_state.ui_lang = "ru"
     st.session_state.include_route = True
     st.session_state.auto_anchor = True
     _load_settings(OFFICIAL_PRESETS[0])
@@ -691,9 +723,10 @@ def entry_response(entry: dict) -> RecommendResponse:
 
 # ── Rendering helpers ────────────────────────────────────────────────────────
 
-SKELETON_HTML = """
+def _skeleton_html() -> str:
+    return f"""
 <div class="aw-row"><div class="aw-bot-badge">AW</div><div class="aw-answer">
-<div class="aw-bubble aw-loading">Подбираю места рядом и пишу объяснения…</div>
+<div class="aw-bubble aw-loading">{t("skeleton", L())}</div>
 <div class="aw-skel"><i style="width:45%"></i><i style="width:80%"></i><i style="width:65%"></i></div>
 <div class="aw-skel"><i style="width:40%"></i><i style="width:75%"></i><i style="width:55%"></i></div>
 </div></div>
@@ -707,25 +740,25 @@ def _html(markup: str, target=st) -> None:
 
 
 def render_chat_header(target, generation_mode: str | None) -> None:
+    lang = L()
     if generation_mode == "pending":
-        mode_label = "подбираю…"
+        mode_label = t("mode_pending", lang)
     elif generation_mode:
-        mode_label = "нейросеть" if "llm" in generation_mode.lower() else "шаблоны"
+        mode_label = t("mode_llm" if "llm" in generation_mode.lower() else "mode_template", lang)
     else:
-        mode_label = "нейросеть" if _server_asr_ready() else "шаблоны"
+        mode_label = t("mode_llm" if _server_asr_ready() else "mode_template", lang)
     _html(f"""
         <div class="aw-head">
             <div>
                 <div class="aw-head-title">Astana Walk</div>
-                <div class="aw-head-sub">Куда сходить в Астане прямо сейчас</div>
+                <div class="aw-head-sub">{t("head_sub", lang)}</div>
             </div>
             <div class="aw-pills">
-                <span class="aw-pill"><span class="msi">location_on</span>{len(load_pois())} мест</span>
-                <span class="aw-pill aw-pill-start"
-                      title="Точка округляется до ~100 м; точные координаты не хранятся и не уходят в модель">
-                    <span class="msi">near_me</span>Ищу рядом с:&nbsp;<b>{escape(start_label())}</b>
+                <span class="aw-pill"><span class="msi">location_on</span>{t("pill_places", lang, n=len(load_pois()))}</span>
+                <span class="aw-pill aw-pill-start" title="{t("pill_start_title", lang)}">
+                    <span class="msi">near_me</span>{t("pill_start", lang)}&nbsp;<b>{escape(start_label())}</b>
                 </span>
-                <span class="aw-pill"><span class="msi">auto_awesome</span>ответ: {mode_label}</span>
+                <span class="aw-pill"><span class="msi">auto_awesome</span>{t("pill_mode", lang, mode=mode_label)}</span>
             </div>
         </div>
         """, target=target)
@@ -737,16 +770,17 @@ def _hhmm(req: RecommendRequest) -> str:
 
 def render_user(entry: dict, req: RecommendRequest) -> None:
     km = f"{req.max_distance_m / 1000:.1f}".rstrip("0").rstrip(".")
+    lang = L()
     extras = []
     if req.accessible:
-        extras.append("без ступенек")
+        extras.append(t("meta_step_free", lang))
     if req.group_size > 1:
-        extras.append(f"{req.group_size} чел.")
+        extras.append(t("meta_people", lang, n=req.group_size))
     if req.weather != "normal":
-        extras.append(WEATHER_LABELS[req.weather].lower())
-    meta = " · ".join([f"📍 {escape(entry['start'])}", f"радиус {km} км", *extras])
+        extras.append(weather_label(req.weather, lang).lower())
+    meta = " · ".join([f"📍 {escape(entry['start'])}", t("meta_radius", lang, km=km), *extras])
     if entry.get("via") == "voice":
-        meta = f"🎙 голос · {meta}"
+        meta = f"🎙 {t('meta_voice', lang)} · {meta}"
     _html(f"""
         <div class="aw-row user">
             <div class="aw-bubble user">
@@ -754,36 +788,40 @@ def render_user(entry: dict, req: RecommendRequest) -> None:
                 <div class="aw-user-meta">{meta}</div>
                 <div class="aw-time">{_hhmm(req)} ✓✓</div>
             </div>
-            <div class="aw-user-badge">Вы</div>
+            <div class="aw-user-badge">{t("you", L())}</div>
         </div>
         """)
 
 
 def _context_chips(u) -> str:
+    lang = L()
     chips = []
     if u.anchor_resolved:
-        chips.append(f"ориентир <b>{escape(u.anchor_resolved.split('(')[0].strip())}</b>")
+        chips.append(f"{t('chip_anchor', lang)} <b>{escape(u.anchor_resolved.split('(')[0].strip())}</b>")
     if u.tags:
-        chips.append("теги " + ", ".join(f"<b>{escape(t)}</b>" for t in u.tags[:4]))
+        chips.append(t("chip_tags", lang) + " " + ", ".join(f"<b>{escape(tag)}</b>" for tag in u.tags[:4]))
     if u.filters:
-        chips.append("фильтры " + ", ".join(f"<b>{escape(f)}</b>" for f in u.filters[:4]))
-    chips.append(f"время <b>{u.time_budget_min} мин</b>" if u.time_budget_min else "время <b>авто</b>")
-    chips.append(f"проверено мест <b>{u.candidates_evaluated}</b>")
-    chips.append("ответ <b>нейросеть</b>" if "llm" in u.generation_mode.lower() else "ответ <b>по шаблону</b>")
+        chips.append(t("chip_filters", lang) + " " + ", ".join(f"<b>{escape(f)}</b>" for f in u.filters[:4]))
+    budget = f"{u.time_budget_min} {t('min', lang)}" if u.time_budget_min else t("chip_auto", lang)
+    chips.append(f"{t('chip_time', lang)} <b>{budget}</b>")
+    chips.append(f"{t('chip_checked', lang)} <b>{u.candidates_evaluated}</b>")
+    mode = t("mode_llm" if "llm" in u.generation_mode.lower() else "chip_template", lang)
+    chips.append(f"{t('chip_answer', lang)} <b>{mode}</b>")
     return "".join(f'<span class="aw-chip">{c}</span>' for c in chips)
 
 
 def _card_html(idx: int, rec) -> str:
-    st_label, st_fg, st_bg = STATUS_STYLE.get(rec.open_status, STATUS_STYLE["unknown"])
-    src_label, src_code = SOURCE_STYLE.get(rec.source, SOURCE_STYLE["poi_data"])
-    category = CATEGORY_RU.get(rec.category, rec.category)
+    lang = L()
+    st_label, st_fg, st_bg = _status(rec.open_status)
+    src_label, src_code = _source(rec.source)
+    category = category_label(rec.category, lang)
     facts = "<br/>".join(escape(f) for f in rec.facts_poi_data) or "—"
     official = ""
     poi = load_pois().get(rec.poi_id)
     if poi and poi.source.startswith("https://visitastana.kz/"):
         official = (
-            f'<div class="aw-note"><a href="{escape(poi.source)}" target="_blank">Источник: Visit Astana</a>'
-            f" · получено {escape(poi.collected_at)}"
+            f'<div class="aw-note"><a href="{escape(poi.source)}" target="_blank">{t("visit_source", lang)}</a>'
+            f" · {t('received', lang, date=escape(poi.collected_at))}"
             + (f"<br/>{escape(poi.description)}" if poi.description else "")
             + "</div>"
         )
@@ -794,27 +832,27 @@ def _card_html(idx: int, rec) -> str:
                 <span class="aw-num">#{idx}</span>
             </div>
             <div class="aw-meta">
-                <span><b>{rec.distance_m} м</b> от вас</span>
-                <span><b>~{rec.walk_min} мин</b> пешком</span>
-                <span><b>~{rec.visit_min} мин</b> на месте</span>
+                <span>{t("card_away", lang, d=rec.distance_m)}</span>
+                <span>{t("card_walk", lang, m=rec.walk_min)}</span>
+                <span>{t("card_visit", lang, m=rec.visit_min)}</span>
             </div>
             <div class="aw-badges">
                 <span class="aw-badge" style="color:{st_fg}; background:{st_bg};">{st_label}</span>
                 <span class="aw-badge aw-badge-src">{src_label}<span class="mono">{src_code}</span></span>
             </div>
-            <p><span class="aw-k">Почему: </span>{escape(rec.why)}</p>
-            <p><span class="aw-k">Что делать: </span>{escape(rec.what_to_do)}</p>
+            <p><span class="aw-k">{t("why", lang)}</span>{escape(rec.why)}</p>
+            <p><span class="aw-k">{t("what", lang)}</span>{escape(rec.what_to_do)}</p>
             <div class="aw-note">{escape(rec.confidence_note)}</div>
             {official}
             <div class="aw-links">
                 <a href="https://www.google.com/maps/dir/?api=1&destination={rec.lat:.6f},{rec.lon:.6f}&travelmode=walking"
-                   target="_blank" rel="noopener">Маршрут пешком · Google Maps</a>
-                <a href="https://2gis.kz/astana/geo/{rec.lon:.6f},{rec.lat:.6f}" target="_blank" rel="noopener">Открыть в 2GIS</a>
+                   target="_blank" rel="noopener">{t("link_walk", lang)}</a>
+                <a href="https://2gis.kz/astana/geo/{rec.lon:.6f},{rec.lat:.6f}" target="_blank" rel="noopener">{t("link_2gis", lang)}</a>
             </div>
             <details>
-                <summary>Факты из базы и что добавил ИИ</summary>
-                <div><b>Факты [poi_data]:</b><br/>{facts}</div>
-                <div><b>Граница фактов и генерации:</b> {escape(rec.generated_plan_note or "—")}</div>
+                <summary>{t("facts_summary", lang)}</summary>
+                <div><b>{t("facts", lang)}</b><br/>{facts}</div>
+                <div><b>{t("boundary", lang)}</b> {escape(rec.generated_plan_note or "—")}</div>
             </details>
         </div>
     """
@@ -822,17 +860,17 @@ def _card_html(idx: int, rec) -> str:
 
 def render_answer(req: RecommendRequest, resp: RecommendResponse, latest: bool) -> None:
     u = resp.used_data
+    lang = L()
     if resp.recommendations:
         n = len(resp.recommendations)
-        word = "место" if n == 1 else "места"
-        intro = f"Нашёл {n} {word} рядом. Вот что подойдёт:"
+        intro = t("found_1", lang) if n == 1 else t("found_n", lang, n=n)
         cards = "".join(_card_html(i, r) for i, r in enumerate(resp.recommendations, start=1))
         footer = (
-            '<details class="aw-disclaimer"><summary>Об источниках и точности данных</summary>'
+            f'<details class="aw-disclaimer"><summary>{t("about_data", lang)}</summary>'
             f"{escape(resp.disclaimer)}</details>" if latest else ""
         )
     else:
-        intro = "<b>Рядом ничего не нашлось.</b> " + escape(resp.disclaimer)
+        intro = f"<b>{t('nothing_found', lang)}</b> " + escape(resp.disclaimer)
         cards, footer = "", ""
     _html(f"""
         <div class="aw-row">
@@ -847,10 +885,10 @@ def render_answer(req: RecommendRequest, resp: RecommendResponse, latest: bool) 
         """)
     if latest and resp.recommendations:
         if st.session_state.show_settings:  # otherwise the map lives in the right panel
-            with st.expander("Карта и маршрут", icon=":material/map:", expanded=True):
+            with st.expander(t("map_route", lang), icon=":material/map:", expanded=True):
                 render_map(resp)
                 render_route(resp)
-        with st.expander("Как это работает: поиск, кандидаты и промпт", icon=":material/manage_search:"):
+        with st.expander(t("how_it_works", lang), icon=":material/manage_search:"):
             render_inspector(req, resp)
 
 
@@ -869,25 +907,26 @@ def _fit_view(points: list[list[float]], px: int) -> pdk.ViewState:
 
 
 def render_map(resp: RecommendResponse, height: int = 340) -> None:
+    lang = L()
     center_lat, center_lon = resp.used_data.rounded_coords
     rec_ids = {r.poi_id for r in resp.recommendations}
     rec_points = [
-        {"name": f"{i}. {r.name} · {r.distance_m} м", "label": str(i), "lat": r.lat, "lon": r.lon,
+        {"name": f"{i}. {r.name} · {r.distance_m} {'m' if lang == 'en' else 'м'}", "label": str(i),
+         "lat": r.lat, "lon": r.lon,
          "color": STATUS_RGB.get(r.open_status, STATUS_RGB["unknown"])}
         for i, r in enumerate(resp.recommendations, start=1)
     ]
     stops = resp.route.stops if resp.route and len(resp.route.stops) >= 2 else []
     # Route stops that are not among the cards still need a marker, or the line ends in nowhere.
     extra_points = [
-        {"name": f"Маршрут, шаг {s.step}: {s.name}", "lat": s.lat, "lon": s.lon}
+        {"name": t("map_route_step", lang, n=s.step, name=s.name), "lat": s.lat, "lon": s.lon}
         for s in stops if s.poi_id not in rec_ids
     ]
     layers = [
         # ~100 m privacy zone around the rounded user location
         pdk.Layer(
             "ScatterplotLayer",
-            data=[{"name": "Точка старта (~100 м, точные координаты не сохраняются)",
-                   "lat": center_lat, "lon": center_lon}],
+            data=[{"name": t("map_start", lang), "lat": center_lat, "lon": center_lon}],
             get_position="[lon, lat]",
             get_fill_color=[2, 132, 199, 38],
             get_line_color=[2, 132, 199, 200],
@@ -956,12 +995,11 @@ def render_map(resp: RecommendResponse, height: int = 340) -> None:
         height=height,
     )
     legend = "".join(
-        f'<span><span class="aw-dot" style="background:rgb({c[0]},{c[1]},{c[2]})"></span>{STATUS_STYLE[s][0]}</span>'
+        f'<span><span class="aw-dot" style="background:rgb({c[0]},{c[1]},{c[2]})"></span>{_status(s)[0]}</span>'
         for s, c in STATUS_RGB.items()
     )
     st.markdown(
-        f'<div class="aw-legend">{legend}<span>Номер — место из ответа · круг — точка старта · '
-        "линия — маршрут</span></div>",
+        f'<div class="aw-legend">{legend}<span>{t("map_legend_tail", lang)}</span></div>',
         unsafe_allow_html=True,
     )
 
@@ -970,28 +1008,29 @@ def render_route_timeline(resp: RecommendResponse) -> None:
     """Compact route for the right panel: one row per stop with timing."""
     rt = resp.route
     if not rt:
-        st.caption("Для маршрута нужно минимум 2 подходящих места в радиусе.")
+        st.caption(t("route_needs_two", L()))
         return
+    lang = L()
     rec_num = {r.poi_id: i for i, r in enumerate(resp.recommendations, start=1)}
     rows = []
     for stop in rt.stops:
         num = rec_num.get(stop.poi_id)
         badge = f'<span class="aw-tl-num">{num}</span>' if num else '<span class="aw-tl-num extra"></span>'
-        s_label, s_fg, _ = STATUS_STYLE.get(stop.open_status, STATUS_STYLE["unknown"])
+        s_label, s_fg, _ = _status(stop.open_status)
         rows.append(f"""
             <div class="aw-tl-row">
                 {badge}
                 <div>
                     <div class="aw-tl-name">{escape(stop.name)}</div>
-                    <div class="aw-tl-meta">+{stop.arrival_offset_min}…+{stop.departure_offset_min} мин от старта ·
-                        идти {stop.from_prev_m} м (~{stop.from_prev_walk_min} мин) · на месте ~{stop.visit_min} мин</div>
+                    <div class="aw-tl-meta">{t("route_row", lang, a=stop.arrival_offset_min, b=stop.departure_offset_min,
+                        m=stop.from_prev_m, w=stop.from_prev_walk_min, v=stop.visit_min)}</div>
                     <div class="aw-tl-meta" style="color:{s_fg};">{s_label}</div>
                 </div>
             </div>""")
     _html(f"""
         <div class="aw-tl">
-            <div class="aw-tl-head">{escape(rt.title)} · всего ~{rt.total_duration_min} мин,
-                пешком {rt.total_distance_m} м</div>
+            <div class="aw-tl-head">{t("route_head", lang, title=escape(rt.title), t=rt.total_duration_min,
+                d=rt.total_distance_m)}</div>
             {"".join(rows)}
         </div>
         """)
@@ -1000,19 +1039,23 @@ def render_route_timeline(resp: RecommendResponse) -> None:
 def render_route(resp: RecommendResponse) -> None:
     rt = resp.route
     if not rt:
-        st.caption("Для маршрута нужно минимум 2 подходящих места в радиусе.")
+        st.caption(t("route_needs_two", L()))
         return
-    st.markdown(f"**{escape(rt.title)}** · всего ~{rt.total_duration_min} мин, "
-                f"пешком {rt.total_distance_m} м")
+    lang = L()
+    st.markdown(t("route_head", lang, title=f"**{escape(rt.title)}**", t=rt.total_duration_min,
+                  d=rt.total_distance_m))
+    m_unit = t("min", lang)
     for col, stop in zip(st.columns(len(rt.stops)), rt.stops):
-        s_label, s_fg, s_bg = STATUS_STYLE.get(stop.open_status, STATUS_STYLE["unknown"])
+        s_label, s_fg, s_bg = _status(stop.open_status)
         _html(f"""
             <div class="aw-stop">
-                <div class="aw-stop-stage">Шаг {stop.step} · {escape(stop.stage_note)}</div>
+                <div class="aw-stop-stage">{t("stop_step", lang)} {stop.step} · {escape(stop.stage_note)}</div>
                 <div class="aw-stop-name">{escape(stop.name)}</div>
-                <div class="aw-stop-row"><span>Переход</span><b>{stop.from_prev_m} м · ~{stop.from_prev_walk_min} мин</b></div>
-                <div class="aw-stop-row"><span>На месте</span><b>~{stop.visit_min} мин</b></div>
-                <div class="aw-stop-row"><span>От старта</span><b>+{stop.arrival_offset_min}…+{stop.departure_offset_min} мин</b></div>
+                <div class="aw-stop-row"><span>{t("stop_walk", lang)}</span>
+                    <b>{stop.from_prev_m} {"m" if lang == "en" else "м"} · ~{stop.from_prev_walk_min} {m_unit}</b></div>
+                <div class="aw-stop-row"><span>{t("stop_visit", lang)}</span><b>~{stop.visit_min} {m_unit}</b></div>
+                <div class="aw-stop-row"><span>{t("stop_offset", lang)}</span>
+                    <b>+{stop.arrival_offset_min}…+{stop.departure_offset_min} {m_unit}</b></div>
                 <div style="margin-top:6px;"><span class="aw-badge" style="color:{s_fg}; background:{s_bg};"
                      title="{escape(stop.open_reason)}">{s_label}</span></div>
             </div>
@@ -1020,7 +1063,8 @@ def render_route(resp: RecommendResponse) -> None:
 
 
 def render_inspector(req: RecommendRequest, resp: RecommendResponse) -> None:
-    st.caption("Сначала поиск находит реальные места рядом, затем нейросеть пишет объяснение только по ним.")
+    lang = L()
+    st.caption(t("how_caption", lang))
     u = resp.used_data
     intent_obj = parse_query_intent(
         req.query,
@@ -1034,19 +1078,19 @@ def render_inspector(req: RecommendRequest, resp: RecommendResponse) -> None:
         req.query, u.rounded_coords[0], u.rounded_coords[1],
         max_distance_m=req.max_distance_m, now_iso=req.now_iso, top_k=6,
     )
-    st.markdown("**1. Что система поняла из запроса** (`used_data`)")
+    st.markdown(t("how_step1", lang))
     st.json(json.loads(u.model_dump_json()), expanded=True)
     if cands:
-        st.markdown("**2. Кандидаты из поиска до генерации**")
+        st.markdown(t("how_step2", lang))
         st.dataframe(
             pd.DataFrame([
                 {
-                    "Место": c.poi.name,
-                    "Категория": CATEGORY_RU.get(c.poi.category, c.poi.category),
-                    "Метры": c.distance_m,
-                    "Мин пешком": c.walk_min,
-                    "Совпадение": round(c.relevance, 2),
-                    "Часы": STATUS_STYLE.get(c.open_status, STATUS_STYLE["unknown"])[0],
+                    t("col_place", lang): c.poi.name,
+                    t("col_category", lang): category_label(c.poi.category, lang),
+                    t("col_meters", lang): c.distance_m,
+                    t("col_walk", lang): c.walk_min,
+                    t("col_match", lang): round(c.relevance, 2),
+                    t("col_hours", lang): _status(c.open_status)[0],
                     "id": c.poi.id,
                 }
                 for c in cands
@@ -1054,7 +1098,7 @@ def render_inspector(req: RecommendRequest, resp: RecommendResponse) -> None:
             use_container_width=True,
             hide_index=True,
         )
-    st.markdown("**3. Что ушло в нейросеть** (координат пользователя здесь нет)")
+    st.markdown(t("how_step3", lang))
     msgs = build_rag_messages(req.query, cands, intent_obj, lang=req.lang)
     st.code(msgs[1]["content"], language="json", wrap_lines=True)
 
@@ -1073,28 +1117,38 @@ _restore_settings_state()
 if show_settings:
     _sync_settings_backup()
 r_lat, r_lon = round_coords(st.session_state.lat, st.session_state.lon)
+lang = L()
 
 with col_side:
     with st.container(key="side", height=800, border=False):
         _html(f"""
             <div class="aw-brand">
-                <img src="{LOGO_URL}" alt="AstanaWalk.ai — прогулки по Астане">
+                <img src="{LOGO_URL}" alt="{t("logo_alt", lang)}">
             </div>
             """)
+        st.segmented_control(
+            t("language", lang),
+            options=list(LANGS),
+            format_func=LANG_SHORT.get,
+            key="ui_lang",
+            on_change=set_language,
+            label_visibility="collapsed",
+            width="stretch",
+        )
         st.button(
-            "Новый чат",
+            t("new_chat", lang),
             key="btn_newchat",
             icon=":material/add_comment:",
             on_click=new_chat,
             use_container_width=True,
-            help="Начать новый разговор; прошлые чаты останутся в истории ниже",
+            help=t("new_chat_help", lang),
         )
 
-        st.markdown('<div class="aw-side-title">Сценарии</div>', unsafe_allow_html=True)
+        st.markdown(f'<div class="aw-side-title">{t("scenarios", lang)}</div>', unsafe_allow_html=True)
         with st.container(key="presets"):
             for idx, preset in enumerate(OFFICIAL_PRESETS):
                 st.button(
-                    preset["title"].split(". ", 1)[-1],
+                    preset_title(preset, lang),
                     key=f"btn_{preset['id']}",
                     icon=PRESET_ICONS[idx % len(PRESET_ICONS)],
                     on_click=run_preset,
@@ -1106,7 +1160,7 @@ with col_side:
                     background: {ACCENT_SOFT} !important; border-left-color: {ACCENT} !important;
                     font-weight: 600 !important; }}</style>""")
 
-        st.markdown('<div class="aw-side-sep"></div><div class="aw-side-title">История чатов</div>',
+        st.markdown(f'<div class="aw-side-sep"></div><div class="aw-side-title">{t("chats", lang)}</div>',
                     unsafe_allow_html=True)
         convos = st.session_state.convos
         if convos:
@@ -1127,7 +1181,7 @@ with col_side:
                         font-weight: 600 !important; }}</style>""")
         else:
             st.markdown(
-                '<div class="aw-empty-side">Пока нет чатов. Задайте вопрос — и он появится здесь.</div>',
+                f'<div class="aw-empty-side">{t("chats_empty", lang)}</div>',
                 unsafe_allow_html=True,
             )
 
@@ -1149,11 +1203,11 @@ with col_chat:
         # Settings gear pinned to the chat header's top-right corner.
         with st.container(key="gearrow"):
             st.button(
-                "Настройки",
+                t("settings", lang),
                 key="btn_gear",
                 icon=":material/settings:",
                 on_click=toggle_settings,
-                help="Свернуть или раскрыть панель настроек (точка старта, радиус, время, погода)",
+                help=t("settings_help", lang),
             )
         if st.session_state.show_settings:
             st.html(f"""<style>.st-key-btn_gear button {{
@@ -1163,9 +1217,7 @@ with col_chat:
         with st.container(key="composer"):
             voice_ready = _server_asr_ready()  # speech-to-text needs the OpenRouter key
             st.chat_input(
-                "Напишите или нажмите микрофон и скажите, куда хочется сходить"
-                if voice_ready else
-                "Напишите, куда хочется сходить… например: тихое кафе с розеткой на час",
+                t("placeholder_voice" if voice_ready else "placeholder", lang),
                 key="chat_prompt",
                 on_submit=submit_chat,
                 accept_audio=voice_ready,
@@ -1175,14 +1227,10 @@ with col_chat:
             if _voice and len(_voice) == 2 and _voice[1]:
                 st.caption(_voice[1])
         with messages:
-            _html("""
+            _html(f"""
                 <div class="aw-row">
                     <div class="aw-bot-badge">AW</div>
-                    <div class="aw-bubble">
-                        Привет! Я Astana Walk — подскажу, куда сходить в Астане.
-                        Напишите, что хочется, или выберите готовый сценарий. Я подберу 1–3 реальных места рядом,
-                        покажу, сколько идти, открыто ли сейчас и чем там заняться.
-                    </div>
+                    <div class="aw-bubble">{t("greeting", lang)}</div>
                 </div>
                 """)
             for i, entry in enumerate(entries):
@@ -1191,7 +1239,7 @@ with col_chat:
                 latest = i == len(entries) - 1
                 if "response_json" not in entry:
                     loading = st.empty()
-                    loading.html(SKELETON_HTML)
+                    loading.html(_skeleton_html())
                     resp = entry_response(entry)
                     loading.empty()
                 else:
@@ -1203,11 +1251,11 @@ with col_chat:
 if col_settings is None:
     with col_right:
         with st.container(key="mappanel", height=800, border=False):
-            _html("""
+            _html(f"""
                 <div class="aw-settings-head">
                     <div>
-                        <div class="aw-settings-title">Карта и маршрут</div>
-                        <div class="aw-settings-sub">По последнему ответу · шестерёнка открывает настройки</div>
+                        <div class="aw-settings-title">{t("map_route", lang)}</div>
+                        <div class="aw-settings-sub">{t("map_sub", lang)}</div>
                     </div>
                 </div>
                 """)
@@ -1219,10 +1267,10 @@ if col_settings is None:
                 render_map(_last, height=420)
                 render_route_timeline(_last)
             else:
-                _html("""
+                _html(f"""
                     <div class="aw-map-empty">
                         <span class="msi">map</span>
-                        Здесь появится карта: места из ответа с номерами, точка старта и пеший маршрут.
+                        {t("map_empty", lang)}
                     </div>
                     """)
 else:
@@ -1230,75 +1278,74 @@ else:
         with st.container(key="settings", height=800, border=False):
             _head, _close = st.columns([0.82, 0.18], gap="small")
             with _head:
-                _html("""
+                _html(f"""
                     <div class="aw-settings-head">
                         <div>
-                            <div class="aw-settings-title">Настройки прогулки</div>
-                            <div class="aw-settings-sub">Применяются к следующему вопросу</div>
+                            <div class="aw-settings-title">{t("settings_title", lang)}</div>
+                            <div class="aw-settings-sub">{t("settings_sub", lang)}</div>
                         </div>
                     </div>
                     """)
             with _close:
                 st.button(
-                    "Закрыть",
+                    t("close", lang),
                     key="btn_close_settings",
                     icon=":material/close:",
                     on_click=close_settings,
                     use_container_width=True,
-                    help="Свернуть панель настроек",
+                    help=t("close_help", lang),
                 )
             st.button(
-                "Найти мою геолокацию",
+                t("geo_btn", lang),
                 key="btn_geo",
                 icon=":material/my_location:",
                 on_click=request_geolocation,
                 use_container_width=True,
-                help="Браузер запросит разрешение; координаты сразу округляем до ~100 м, сырые не сохраняем.",
+                help=t("geo_help", lang),
                 disabled=_js_eval is None or bool(_ss_get("geo_click", 0)),
             )
             _geo_click = int(_ss_get("geo_click", 0))
             _geo_key = f"geo_request_{_geo_click}"
             _geo_note = _ss_get("geo_note")
             if _js_eval is None:
-                _geo_note = "Геолокация недоступна (нет компонента) — выберите ориентир или введите координаты."
+                _geo_note = t("geo_unavailable", lang)
             elif _geo_click:
                 _fix = _js_eval(js_expressions=GEOLOCATION_JS, key=_geo_key)
                 if _fix is None:
-                    _geo_note = "Разрешите геолокацию рядом с адресной строкой. Ожидание — до 15 секунд."
+                    _geo_note = t("geo_wait", lang)
                 else:
                     _geo_note = _apply_geo_result(_fix, _geo_key)
                     st.rerun()  # Remove the completed component and re-enable retry.
             if _geo_note:
                 st.caption(_geo_note)
             st.selectbox(
-                "Точка старта",
+                t("start_point", lang),
                 options=list(LANDMARK_POINTS.keys()) + [CUSTOM_POINT],
+                format_func=lambda key: landmark_name(key, lang),
                 key="landmark",
                 on_change=apply_landmark,
-                help="Ориентир вместо геолокации: так не нужно раскрывать, где вы находитесь.",
+                help=t("start_help", lang),
             )
             if st.session_state.landmark in LANDMARK_POINTS:
-                st.caption(LANDMARK_POINTS[st.session_state.landmark][2])
-            with st.expander("Точные координаты", expanded=st.session_state.landmark == CUSTOM_POINT):
+                st.caption(landmark_note(st.session_state.landmark, lang))
+            with st.expander(t("exact_coords", lang), expanded=st.session_state.landmark == CUSTOM_POINT):
                 c1, c2 = st.columns(2)
-                c1.number_input("Широта", key="lat", format="%.4f", step=0.002, on_change=mark_custom_point)
-                c2.number_input("Долгота", key="lon", format="%.4f", step=0.002, on_change=mark_custom_point)
-                st.caption(f"В логи и API попадает только округление до ~100 м: `{r_lat}, {r_lon}`")
-            st.slider("Радиус пешком, м", min_value=300, max_value=6000, step=100, key="max_distance_m")
+                c1.number_input(t("lat", lang), key="lat", format="%.4f", step=0.002, on_change=mark_custom_point)
+                c2.number_input(t("lon", lang), key="lon", format="%.4f", step=0.002, on_change=mark_custom_point)
+                st.caption(t("coords_caption", lang, lat=r_lat, lon=r_lon))
+            st.slider(t("radius", lang), min_value=300, max_value=6000, step=100, key="max_distance_m")
             d1, d2 = st.columns([1.15, 1])
-            d1.date_input("Дата", key="visit_date", format="DD.MM.YYYY")
-            d2.time_input("Время", key="visit_time", step=900)
-            st.caption("Время Астаны (UTC+5). Влияет на статус «открыто / закрыто».")
-            st.selectbox("Погода", options=list(WEATHER_LABELS), format_func=WEATHER_LABELS.get, key="weather")
-            g1, g2 = st.columns(2)
-            g1.number_input("Сколько человек", min_value=1, max_value=15, key="group_size")
-            g2.selectbox("Язык ответа", options=list(LANG_LABELS), format_func=LANG_LABELS.get, key="lang")
-            st.toggle("Без ступенек: коляска, дети", key="accessible")
-            st.toggle("Собрать маршрут из 2–3 мест", key="include_route")
-            st.toggle("Понимать ориентиры из текста запроса", key="auto_anchor",
-                      help="Например, «я возле Хан Шатыра» сдвинет точку старта к ТРЦ.")
+            d1.date_input(t("date", lang), key="visit_date", format="DD.MM.YYYY")
+            d2.time_input(t("time", lang), key="visit_time", step=900)
+            st.caption(t("time_caption", lang))
+            st.selectbox(t("weather", lang), options=list(WEATHER_LABELS),
+                         format_func=lambda w: weather_label(w, lang), key="weather")
+            st.number_input(t("group", lang), min_value=1, max_value=15, key="group_size")
+            st.toggle(t("toggle_step_free", lang), key="accessible")
+            st.toggle(t("toggle_route", lang), key="include_route")
+            st.toggle(t("toggle_anchor", lang), key="auto_anchor", help=t("toggle_anchor_help", lang))
             st.markdown(
-                f'<div class="aw-foot">База: {len(load_pois())} мест · OpenStreetMap + Visit Astana · '
-                f"поиск <span class=\"mono\">{BACKEND}</span></div>",
+                f'<div class="aw-foot">{t("foot", lang, n=len(load_pois()))} '
+                f"<span class=\"mono\">{BACKEND}</span></div>",
                 unsafe_allow_html=True,
             )
