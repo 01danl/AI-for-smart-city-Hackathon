@@ -64,7 +64,8 @@ ASTANA_ANCHORS: list[tuple[str, str, float, float, list[str]]] = [
         "Выставочный комплекс EXPO 2017 (Нур Алем)",
         51.092788,
         71.421482,
-        ["экспо 2017", "экспо-2017", "здании экспо", "возле экспо", "у экспо", "expo 2017", "нур алем", "nur alem"],
+        ["экспо 2017", "экспо-2017", "здании экспо", "возле экспо", "у экспо", "expo 2017", "нур алем", "nur alem",
+         "нұр әлем"],
     ),
     (
         "baiterek",
@@ -92,14 +93,14 @@ ASTANA_ANCHORS: list[tuple[str, str, float, float, list[str]]] = [
         "Ботанический сад Астаны",
         51.106165,
         71.416571,
-        ["ботанический сад", "ботанического сада", "botanical garden"],
+        ["ботанический сад", "ботанического сада", "botanical garden", "ботаникалық бақ"],
     ),
     (
         "national_museum",
         "Национальный музей РК",
         51.11823,
         71.469382,
-        ["национальный музей", "нацмузей", "national museum"],
+        ["национальный музей", "нацмузей", "national museum", "ұлттық музей"],
     ),
     (
         "hazret_sultan",
@@ -120,12 +121,18 @@ ASTANA_ANCHORS: list[tuple[str, str, float, float, list[str]]] = [
         "Старый центр (Правый берег)",
         51.1694,
         71.4491,
-        ["старый центр", "правый берег", "на правом берегу"],
+        ["старый центр", "правый берег", "на правом берегу", "ескі орталық", "оң жағалау",
+         "old town", "old center", "right bank"],
     ),
 ]
 
 _KAZAKH_CHARS_RE = re.compile(r"[әіңғүұқөһӘІҢҒҮҰҚӨҺ]")
-_KAZAKH_WORDS = {"қайда", "серуендеу", "жақын", "баламен", "кофехана", "мұражай", "саябақ", "тамақ"}
+_KAZAKH_WORDS = {"қайда", "серуендеу", "жақын", "баламен", "кофехана", "мұражай", "саябақ", "тамақ",
+                 "барайын", "керек", "маған", "менің", "орын"}
+# Short Kazakh weather words are matched as whole words: "қар" (snow) is also the start
+# of "қарау" (to look), "жел" (wind) of other words.
+_KK_COLD_RE = re.compile(r"\b(?:суық|аяз|жел|боран)\b|жылын")
+_KK_WET_RE = re.compile(r"\b(?:жаңбыр\w*|қар)\b|қар жау")
 _ENGLISH_WORDS = {"where", "walk", "quiet", "place", "coffee", "museum", "park", "near", "tourist", "book"}
 
 _CATEGORY_STEMS: dict[str, list[str]] = {
@@ -188,7 +195,7 @@ def extract_time_budget_minutes(query: str) -> int | None:
         return int(m.group(2))
 
     # Range in hours: "1-2 часа", "1-2 hours"
-    m = re.search(r"(\d{1,2})\s*-\s*(\d{1,2})\s*(?:час|ч\b|hour|hr)", q)
+    m = re.search(r"(\d{1,2})\s*-\s*(\d{1,2})\s*(?:час|ч\b|сағат|hour|hr)", q)
     if m:
         return int(m.group(2)) * 60
 
@@ -198,15 +205,15 @@ def extract_time_budget_minutes(query: str) -> int | None:
         return int(m.group(1))
 
     # Single hours: "2 часа перед вылетом", "на 3 часа"
-    m = re.search(r"(\d{1,2})\s*(?:часа|час|часов|hours|hour)", q)
+    m = re.search(r"(\d{1,2})\s*(?:часа|час|часов|сағат|hours|hour)", q)
     if m:
         return int(m.group(1)) * 60
 
-    if "пару часов" in q or "два часа" in q or "couple of hours" in q:
+    if any(p in q for p in ("пару часов", "два часа", "couple of hours", "two hours", "екі сағат")):
         return 120
-    if "полчаса" in q or "полчасика" in q:
+    if any(p in q for p in ("полчаса", "полчасика", "half an hour", "жарты сағат")):
         return 30
-    if "час " in f"{q} " or "на час" in q:
+    if "час " in f"{q} " or "на час" in q or "an hour" in q or "бір сағат" in q:
         return 60
     return None
 
@@ -264,9 +271,10 @@ def parse_query_intent(
     weather: WeatherContext = "normal"
     if explicit_weather in ("normal", "cold_windy", "rain_snow"):
         weather = explicit_weather  # type: ignore[assignment]
-    elif any(w in q for w in ("мороз", "холод", "ветер", "ветрен", "буран", "замёрз", "погреться", "cold", "wind")):
+    elif any(w in q for w in ("мороз", "холод", "ветер", "ветрен", "буран", "замёрз", "погреться", "cold", "wind",
+                              "freezing")) or _KK_COLD_RE.search(q):
         weather = "cold_windy"
-    elif any(w in q for w in ("дожд", "снег", "ливень", "rain", "snow")):
+    elif any(w in q for w in ("дожд", "снег", "ливень", "rain", "snow")) or _KK_WET_RE.search(q):
         weather = "rain_snow"
 
     if weather in ("cold_windy", "rain_snow") and "indoor" not in hinted_tags:
