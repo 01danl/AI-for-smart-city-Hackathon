@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 430 96" width="430" height="96" fill="none">
+  <g transform="translate(12, 4)">
+    <!-- Внешний вектор стрелки навигации -->
+    <path d="M44 14 L70 72 L44 58 L18 72 Z" fill="#0284C7" stroke="#0284C7" stroke-width="4" stroke-linejoin="round" />
+
+    <!-- Вырезанный внутри симметричный рог орнамента -->
+    <path d="M44 50 L44 34
+             M44 36 A 7 7 0 1 0 32 42
+             M44 36 A 7 7 0 1 1 56 42" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round" />
+  </g>
+
+  <text x="98" y="61" fill="#F8FAFC" font-family="Inter, -apple-system, BlinkMacSystemFont, sans-serif" font-size="40" font-weight="800" letter-spacing="-1.8">
+    AstanaWalk<tspan fill="#0284C7">.ai</tspan>
+  </text>
+</svg>
