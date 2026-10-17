@@ -645,10 +645,7 @@ def request_voice() -> None:
 
 def _clear_voice_note() -> None:
     """Drop the last voice status when the user navigates elsewhere."""
-    try:
-        del st.session_state.mic_state
-    except KeyError:
-        pass
+    st.session_state.pop("mic_state", None)
 
 
 def _handle_sr_result(res: dict) -> bool:
