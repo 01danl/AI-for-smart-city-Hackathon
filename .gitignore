@@ -27,3 +27,6 @@ models/
 .DS_Store
 .idea/
 .vscode/
+
+# Anonymous 👍/👎 votes collected by the demo (local only)
+data/feedback.jsonl
