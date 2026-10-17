@@ -59,6 +59,7 @@ from backend.retrieval import warmup as _retrieval_warmup  # noqa: E402
 from backend.retrieval.geo import round_coords  # noqa: E402
 from backend.retrieval.index import load_pois  # noqa: E402
 from frontend.geolocation import GEOLOCATION_JS, geolocation_error  # noqa: E402
+from frontend.voice_input import transcribe_question  # noqa: E402
 
 st.set_page_config(
     page_title="Astana Walk · прогулки по Астане",
@@ -213,30 +214,15 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 /* Keep the component mounted without adding an empty row. */
 [class*="st-key-geo_request_"] {{ height: 0; min-height: 0; overflow: hidden; }}
 
-/* Voice input: mic pinned inside the composer next to the send button */
-.st-key-composer_input {{ position: relative; }}
-/* Native send: 16px inset + 32px button; leave an 8px gap before the mic. */
-.st-key-btn_mic {{ position: absolute; right: 56px; bottom: 20px; z-index: 5; }}
-.st-key-btn_mic button {{ width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 0;
-    border: none; background: {ACCENT}; color: #fff; border-radius: 10px !important; }}
-.st-key-btn_mic button:hover {{ background: {ACCENT}; color: #fff; filter: brightness(.92); }}
-.st-key-btn_mic button:focus-visible {{ outline: 2px solid {ACCENT}; outline-offset: 3px; }}
-.st-key-btn_mic button[disabled] {{ opacity: .5; }}
 /* Remove the hidden label from flex layout: its gap otherwise shifts the icon. */
-.st-key-btn_gear button, .st-key-btn_mic button, .st-key-btn_close_settings button {{
+.st-key-btn_gear button, .st-key-btn_close_settings button {{
     display: flex; align-items: center; justify-content: center; gap: 0;
 }}
 .st-key-btn_gear button [data-testid="stMarkdownContainer"],
-.st-key-btn_mic button [data-testid="stMarkdownContainer"],
 .st-key-btn_close_settings button [data-testid="stMarkdownContainer"] {{
     position: absolute; width: 1px; height: 1px; padding: 0;
     overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }}
-[class*="st-key-mic_request_"], [class*="st-key-mic_capture_"] {{ display: none; }}
-@keyframes aw-pulse {{ 0%, 100% {{ opacity: .25; }} 50% {{ opacity: 1; }} }}
-.aw-mic-live {{ color: {MUTED}; font-size: 0.74rem; margin-top: 6px; }}
-.aw-mic-live::before {{ content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
-    background: #D92D20; margin-right: 7px; animation: aw-pulse 1.1s infinite; }}
 
 /* Sidebar (ChatGPT-style) */
 .aw-brand {{ display: flex; align-items: center; min-height: 64px; padding: 0 0 12px; }}
@@ -566,12 +552,21 @@ def _ask(query: str, preset_id: str | None = None, via: str | None = None) -> No
 
 
 def submit_chat() -> None:
-    """Save typed text before the rerun selects a conversation and renders history."""
-    query = _ss_get("chat_prompt", "")
-    if isinstance(query, str) and query.strip():
-        _restore_settings_state()
-        _clear_voice_note()
-        _ask(query.strip())
+    """Save typed text or a voice message before the rerun selects a conversation and renders history.
+
+    With voice enabled the chat input returns a ChatInputValue (text and/or audio), otherwise a str.
+    """
+    value = _ss_get("chat_prompt")
+    if value is None:
+        return
+    text = value if isinstance(value, str) else (getattr(value, "text", None) or "")
+    audio = None if isinstance(value, str) else getattr(value, "audio", None)
+    _restore_settings_state()
+    _clear_voice_note()
+    if text.strip():
+        _ask(text.strip())
+    elif audio is not None:
+        _ask_by_voice(audio.getvalue())
 
 
 def run_preset(preset: dict) -> None:
@@ -648,133 +643,10 @@ def _apply_geo_result(loc: dict, geo_key: str) -> str | None:
     return ss.geo_note
 
 
-# ── Voice input (browser Speech Recognition through streamlit-js-eval) ───────
-
-_VOICE_LANG = {"ru": "ru-RU", "kk": "kk-KZ", "en": "en-US"}
-
-_VOICE_ERROR_HINTS = {
-    "unsupported": "браузер не поддерживает распознавание речи — нужны Chrome, Edge или Safari",
-    "not-allowed": "доступ к микрофону запрещён — разрешите его в настройках браузера",
-    "no-speech": "не расслышал речь — попробуйте ещё раз",
-    "timeout": "не дождался фразы — попробуйте ещё раз",
-    "network": "распознаванию нужна сеть, а она недоступна",
-    "audio-capture": "микрофон не найден",
-    "language-not-supported": "этот язык не распознаётся браузером — смените язык в панели настроек",
-}
-
-# One-shot recognition: click -> speak -> transcript resolves as JSON-ish dict.
-# The wrapper awaits the returned promise and sends the result back to Python.
-_VOICE_JS_TMPL = """
-(function() {
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    return new Promise((resolve) => {
-        if (!SR) { resolve({error: 'unsupported'}); return; }
-        let rec; let settled = false;
-        const finish = (v) => { if (settled) return; settled = true;
-            try { if (rec) rec.stop(); } catch (e) {} resolve(v); };
-        try {
-            rec = new SR();
-            rec.lang = '__AW_LANG__';
-            rec.interimResults = false;
-            rec.maxAlternatives = 1;
-            rec.onresult = (e) => {
-                const piece = e.results[e.results.length - 1];
-                finish({text: String((piece && piece[0] && piece[0].transcript) || '').trim()});
-            };
-            rec.onerror = (e) => finish({error: String((e && e.error) || 'error')});
-            rec.onend = () => finish({error: 'no-speech'});
-            setTimeout(() => finish({error: 'timeout'}), 20000);
-            rec.start();
-        } catch (err) {
-            finish({error: String((err && err.message) || err)});
-        }
-    });
-})()
-"""
-
-
-def _voice_js(lang: str) -> str:
-    """SpeechRecognition fix as an IIFE promise, tuned to the chat language."""
-    return _VOICE_JS_TMPL.replace("__AW_LANG__", _VOICE_LANG.get(lang, "ru-RU"))
-
-
-# Fallback capture: record mic audio to a 16 kHz mono WAV (base64) when the
-# browser Speech Recognition API is unavailable. Auto-stops after 1.6 s of
-# silence following speech, or at a 10 s cap. The clip goes to OpenRouter STT.
-_VOICE_CAPTURE_JS = """
-(function() {
-    return new Promise((resolve) => {
-        let done = false; let ac; let stream; let node;
-        const cleanup = () => { try {
-            if (node) { node.onaudioprocess = null; node.disconnect(); }
-            if (stream) stream.getTracks().forEach(t => t.stop());
-            if (ac) ac.close();
-        } catch (e) {} };
-        const finish = (v) => { if (done) return; done = true; cleanup(); resolve(v); };
-        const toWavB64 = (chunks, srcRate) => {
-            let total = 0; for (const c of chunks) total += c.length;
-            const all = new Float32Array(total); let off = 0;
-            for (const c of chunks) { all.set(c, off); off += c.length; }
-            const rate = 16000, step = srcRate / rate, n = Math.floor(total / step);
-            const buf = new ArrayBuffer(44 + n * 2), v = new DataView(buf);
-            const ws = (o, s) => { for (let i = 0; i < s.length; i++) v.setUint8(o + i, s.charCodeAt(i)); };
-            ws(0,'RIFF'); v.setUint32(4, 36 + n*2, true); ws(8,'WAVE'); ws(12,'fmt ');
-            v.setUint32(16,16,true); v.setUint16(20,1,true); v.setUint16(22,1,true);
-            v.setUint32(24,rate,true); v.setUint32(28,rate*2,true); v.setUint16(32,2,true); v.setUint16(34,16,true);
-            ws(36,'data'); v.setUint32(40, n*2, true);
-            let p = 44;
-            for (let k = 0; k < n; k++) {
-                const t = k * step, i0 = Math.floor(t), i1 = Math.min(total - 1, i0 + 1), f = t - i0;
-                const s = all[i0] * (1 - f) + all[i1] * f;
-                v.setInt16(p, Math.max(-1, Math.min(1, s)) * 0x7FFF, true); p += 2;
-            }
-            const bytes = new Uint8Array(buf); let bin = '';
-            for (let i = 0; i < bytes.length; i += 0x8000) {
-                bin += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
-            }
-            return btoa(bin);
-        };
-        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { finish({error: 'unsupported'}); return; }
-        navigator.mediaDevices.getUserMedia({ audio: true }).then((s) => {
-            stream = s;
-            ac = new (window.AudioContext || window.webkitAudioContext)();
-            let chunks = []; let loud = false; let quiet = 0; let batches = 0;
-            node = ac.createScriptProcessor(4096, 1, 1);
-            node.onaudioprocess = (e) => {
-                const IN = e.inputBuffer.getChannelData(0);
-                let sum = 0;
-                for (let i = 0; i < IN.length; i++) sum += IN[i] * IN[i];
-                chunks.push(new Float32Array(IN));
-                batches++;
-                const rms = Math.sqrt(sum / IN.length);
-                if (rms > 0.012) { loud = true; quiet = 0; }
-                else if (loud) { quiet++; }
-                const seconds = batches * 4096 / ac.sampleRate;
-                if (seconds >= 10 || (loud && quiet >= 19)) {
-                    finish({ data: toWavB64(chunks, ac.sampleRate) });
-                }
-            };
-            const sink = ac.createGain(); sink.gain.value = 0;
-            ac.createMediaStreamSource(s).connect(node);
-            node.connect(sink); sink.connect(ac.destination);
-            setTimeout(() => { finish({ data: toWavB64(chunks, ac.sampleRate) }); }, 12000);
-        }).catch((err) => { cleanup(); finish({error: String((err && err.name) || err)}); });
-    });
-})()
-"""
-
-
-def _capture_js() -> str:
-    """Mic recording fix for the server-side STT fallback."""
-    return _VOICE_CAPTURE_JS
-
-
-def request_voice() -> None:
-    """Mic callback: bump a MONOTONIC serial so every fix gets a fresh component key.
-    Resetting to a reused key would let an already-consumed transcript leak back in."""
-    ss = st.session_state
-    ss.mic_serial = int(_ss_get("mic_serial", 0)) + 1
-    ss.mic_click = ss.mic_serial
+# ── Voice input (recorded in the chat input, transcribed on the server) ───────
+#
+# The chat input's built-in recorder replaced the browser Web Speech API in a hidden
+# iframe, which could stay on "listening" forever in Chrome. See frontend/voice_input.py.
 
 
 def _clear_voice_note() -> None:
@@ -782,76 +654,12 @@ def _clear_voice_note() -> None:
     st.session_state.pop("mic_state", None)
 
 
-def _handle_sr_result(res: dict) -> bool:
-    """Process one browser SpeechRecognition fix. False when SR is just unavailable."""
-    ss = st.session_state
-    text = " ".join(str((res or {}).get("text") or "").split())
-    if (res or {}).get("error") == "unsupported":
-        return False  # hand over to the server-side STT pipeline
-    if len(text) >= 4:
-        ss.mic_click = 0  # consumed: unmount the fix, stop listening until the next click
-        ss.mic_state = ("sent", f"🎙 Распознано и отправлено: «{text}»")
-        _ask(text, via="voice")
-        return True
+def _ask_by_voice(wav: bytes) -> None:
+    """Transcribe a recorded question and ask it, or leave a status note on failure."""
+    text, note = transcribe_question(wav, _server_transcribe)
+    st.session_state.mic_state = ("sent" if text else "error", note)
     if text:
-        ss.mic_click = 0
-        ss.mic_state = ("error", f"🎙 Не расслышал («{text}») — попробуйте ещё раз или напечатайте.")
-        return True
-    err = str((res or {}).get("error") or "no-speech")
-    hint = _VOICE_ERROR_HINTS.get(err.lower(), f"не удалось распознать ({err})")
-    ss.mic_click = 0  # any terminal outcome stops the mic loop
-    ss.mic_state = ("error", f"🎙 {hint} — можно напечатать вопрос")
-    return True
-
-
-def _handle_capture_result(caps: dict) -> None:
-    """Send the recorded clip to OpenRouter STT and auto-ask the transcript."""
-    ss = st.session_state
-    clip = str((caps or {}).get("data") or "")
-    if not clip:
-        err = str((caps or {}).get("error") or "неизвестная ошибка записи")
-        hint = _VOICE_ERROR_HINTS.get(err.lower(), f"записать аудио не вышло ({err})")
-        ss.mic_click = 0
-        ss.mic_state = ("error", f"🎙 {hint} — напечатайте вопрос")
-        return
-    ss.mic_state = ("listen", "Сервер распознаёт аудио (OpenRouter STT)…")
-    try:
-        text = _server_transcribe(clip)
-    except Exception as exc:  # noqa: BLE001 — the demo stays clickable on any provider error
-        short = " ".join(str(exc).split())[:120]
-        ss.mic_click = 0
-        ss.mic_state = ("error", f"🎙 Серверное распознавание не сработало ({short}) — напечатайте вопрос")
-        return
-    ss.mic_click = 0
-    ss.mic_state = ("sent", f"🎙 Распознано ИИ (OpenRouter STT) и отправлено: «{text}»")
-    _ask(text, via="voice")
-
-
-def _voice_consume() -> None:
-    """Handle the pending speech fix before anything renders: auto-ask or stash a note."""
-    ss = st.session_state
-    click = int(_ss_get("mic_click", 0))
-    if not click or _js_eval is None:
-        return
-    res = _js_eval(js_expressions=_voice_js(_ss_get("lang", "ru")), key=f"mic_request_{click}")
-    if res is None:
-        ss.mic_state = ("listen", "Слушаю… говорите вопрос, пауза завершит фразу.")
-        return
-    if _handle_sr_result(res):
-        return
-    # Browser Speech Recognition is not available here: record audio and use the
-    # cheap server-side STT model through OpenRouter (Gemini Transcribe).
-    if not _server_asr_ready():
-        ss.mic_click = 0
-        ss.mic_state = ("error",
-                        "🎙 В этом браузере встроенное распознавание недоступно, а для серверного "
-                        "нужен OPENROUTER_API_KEY — напечатайте вопрос или добавьте ключ")
-        return
-    caps = _js_eval(js_expressions=_capture_js(), key=f"mic_capture_{click}")
-    if caps is None:
-        ss.mic_state = ("listen", "Записываю… говорите вопрос, пауза завершит фразу.")
-        return
-    _handle_capture_result(caps)
+        _ask(text, via="voice")
 
 
 if "convos" not in st.session_state:
@@ -1266,10 +1074,6 @@ if show_settings:
     _sync_settings_backup()
 r_lat, r_lon = round_coords(st.session_state.lat, st.session_state.lon)
 
-# Voice input: consume the pending speech fix before columns render, so the new
-# voice message is already in the entry list when the chat column is drawn.
-_voice_consume()
-
 with col_side:
     with st.container(key="side", height=800, border=False):
         _html(f"""
@@ -1357,27 +1161,19 @@ with col_chat:
 
         messages = st.container(key="messages", height="stretch", border=False, autoscroll=True)
         with st.container(key="composer"):
-            with st.container(key="composer_input", gap=None):
-                st.chat_input(
-                    "Напишите, куда хочется сходить… например: тихое кафе с розеткой на час",
-                    key="chat_prompt", on_submit=submit_chat,
-                )
-                st.button(
-                    "Микрофон",
-                    key="btn_mic",
-                    icon=":material/mic:",
-                    on_click=request_voice,
-                    use_container_width=False,
-                    help="Нажмите и говорите: пауза завершит фразу. Голос распознаёт браузер, "
-                         "а если он не умеет — аудио уходит в ИИ (OpenRouter STT).",
-                    disabled=_js_eval is None,
-                )
+            voice_ready = _server_asr_ready()  # speech-to-text needs the OpenRouter key
+            st.chat_input(
+                "Напишите или нажмите микрофон и скажите, куда хочется сходить"
+                if voice_ready else
+                "Напишите, куда хочется сходить… например: тихое кафе с розеткой на час",
+                key="chat_prompt",
+                on_submit=submit_chat,
+                accept_audio=voice_ready,
+                audio_sample_rate=16000,
+            )
             _voice = _ss_get("mic_state") or ("idle", None)
             if _voice and len(_voice) == 2 and _voice[1]:
-                if _voice[0] == "listen":
-                    _html(f'<div class="aw-mic-live">{escape(_voice[1])}</div>')
-                else:
-                    st.caption(_voice[1])
+                st.caption(_voice[1])
         with messages:
             _html("""
                 <div class="aw-row">
