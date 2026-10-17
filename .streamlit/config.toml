@@ -4,7 +4,10 @@ primaryColor = "#0284C7"
 backgroundColor = "#F6F7FB"
 secondaryBackgroundColor = "#F0F7FB"
 textColor = "#1D2433"
-font = "sans serif"
+# Onest covers Cyrillic incl. all Kazakh letters (ә ғ қ ң ө ұ ү һ і) and Latin.
+font = "Onest:https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap, sans-serif"
+headingFont = "Onest:https://fonts.googleapis.com/css2?family=Onest:wght@400;500;600;700&display=swap, sans-serif"
+codeFont = "JetBrains Mono:https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap, monospace"
 
 [client]
 toolbarMode = "minimal"
