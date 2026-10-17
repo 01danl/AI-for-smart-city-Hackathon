@@ -498,13 +498,16 @@ def _sync_settings_backup() -> None:
 
 
 def _restore_settings_state() -> None:
-    """Re-seed widget state from the backup before the drawer is rendered."""
+    """Use the durable backup while hidden; widget cleanup can expose stale defaults."""
     ss = st.session_state
     try:
         backup = ss["_settings_backup"]
     except KeyError:
         return
     for key in _SETTING_KEYS:
+        if not ss.show_settings and key in backup:
+            ss[key] = backup[key]
+            continue
         try:
             _ = ss[key]  # Avoid rendering settings values through Streamlit magic.
         except KeyError:
@@ -534,11 +537,16 @@ def open_convo(convo_id: int) -> None:
 
 def toggle_settings() -> None:
     """Header gear callback: show or hide the right settings drawer."""
+    if st.session_state.show_settings:
+        _sync_settings_backup()
+    else:
+        _restore_settings_state()
     st.session_state.show_settings = not st.session_state.show_settings
 
 
 def close_settings() -> None:
     """Drawer callback: hide the right settings drawer."""
+    _sync_settings_backup()
     st.session_state.show_settings = False
 
 
@@ -557,11 +565,21 @@ def _ask(query: str, preset_id: str | None = None, via: str | None = None) -> No
     ss.active_preset = preset_id
 
 
+def submit_chat() -> None:
+    """Save typed text before the rerun selects a conversation and renders history."""
+    query = _ss_get("chat_prompt", "")
+    if isinstance(query, str) and query.strip():
+        _restore_settings_state()
+        _clear_voice_note()
+        _ask(query.strip())
+
+
 def run_preset(preset: dict) -> None:
     """Button callback: load a jury scenario's context and ask its question."""
     _load_settings(preset)
     st.session_state.start_source = "landmark" if st.session_state.landmark in LANDMARK_POINTS else "custom"
     st.session_state.geo_note = None
+    _sync_settings_backup()
     _ask(preset["query"], preset["id"])
 
 
@@ -856,6 +874,13 @@ def run_recommendations(req_json: str) -> RecommendResponse:
     return generate_recommendations(RecommendRequest.model_validate_json(req_json))
 
 
+def entry_response(entry: dict) -> RecommendResponse:
+    """Keep completed answers in the conversation across reruns and cache eviction."""
+    if "response_json" not in entry:
+        entry["response_json"] = run_recommendations(entry["req_json"]).model_dump_json()
+    return RecommendResponse.model_validate_json(entry["response_json"])
+
+
 # ── Rendering helpers ────────────────────────────────────────────────────────
 
 SKELETON_HTML = """
@@ -871,6 +896,31 @@ def _html(markup: str, target=st) -> None:
     """Render raw HTML. Lines are flattened: Markdown would treat indented lines after
     a blank line as a code block and show the tags as text."""
     target.markdown(" ".join(line.strip() for line in markup.splitlines()), unsafe_allow_html=True)
+
+
+def render_chat_header(target, generation_mode: str | None) -> None:
+    if generation_mode == "pending":
+        mode_label = "подбираю…"
+    elif generation_mode:
+        mode_label = "нейросеть" if "llm" in generation_mode.lower() else "шаблоны"
+    else:
+        mode_label = "нейросеть" if _server_asr_ready() else "шаблоны"
+    _html(f"""
+        <div class="aw-head">
+            <div>
+                <div class="aw-head-title">Astana Walk</div>
+                <div class="aw-head-sub">Куда сходить в Астане прямо сейчас</div>
+            </div>
+            <div class="aw-pills">
+                <span class="aw-pill"><span class="msi">location_on</span>{len(load_pois())} мест</span>
+                <span class="aw-pill aw-pill-start"
+                      title="Точка округляется до ~100 м; точные координаты не хранятся и не уходят в модель">
+                    <span class="msi">near_me</span>Ищу рядом с:&nbsp;<b>{escape(start_label())}</b>
+                </span>
+                <span class="aw-pill"><span class="msi">auto_awesome</span>ответ: {mode_label}</span>
+            </div>
+        </div>
+        """, target=target)
 
 
 def _hhmm(req: RecommendRequest) -> str:
@@ -1211,8 +1261,9 @@ with st.container(key="app_layout"):
 col_settings = col_right if show_settings else None
 
 # Keep settings state alive across drawer open/close cycles (see _SETTING_KEYS).
-_sync_settings_backup()
 _restore_settings_state()
+if show_settings:
+    _sync_settings_backup()
 r_lat, r_lon = round_coords(st.session_state.lat, st.session_state.lon)
 
 # Voice input: consume the pending speech fix before columns render, so the new
@@ -1285,27 +1336,11 @@ with col_chat:
         entries = convo["entries"] if convo else []
         last_mode = None
         if entries:
-            last_mode = run_recommendations(entries[-1]["req_json"]).used_data.generation_mode
-        if last_mode:
-            mode_label = "нейросеть" if "llm" in last_mode.lower() else "шаблоны"
-        else:  # no answer yet: show what the next answer will use
-            mode_label = "нейросеть" if _server_asr_ready() else "шаблоны"
-        _html(f"""
-            <div class="aw-head">
-                <div>
-                    <div class="aw-head-title">Astana Walk</div>
-                    <div class="aw-head-sub">Куда сходить в Астане прямо сейчас</div>
-                </div>
-                <div class="aw-pills">
-                    <span class="aw-pill"><span class="msi">location_on</span>{len(load_pois())} мест</span>
-                    <span class="aw-pill aw-pill-start"
-                          title="Точка округляется до ~100 м; точные координаты не хранятся и не уходят в модель">
-                        <span class="msi">near_me</span>Ищу рядом с:&nbsp;<b>{escape(start_label())}</b>
-                    </span>
-                    <span class="aw-pill"><span class="msi">auto_awesome</span>ответ: {mode_label}</span>
-                </div>
-            </div>
-            """)
+            saved_response = entries[-1].get("response_json")
+            last_mode = (RecommendResponse.model_validate_json(saved_response).used_data.generation_mode
+                         if saved_response else "pending")
+        header = st.empty()
+        render_chat_header(header, last_mode)
 
         # Settings gear pinned to the chat header's top-right corner.
         with st.container(key="gearrow"):
@@ -1323,7 +1358,10 @@ with col_chat:
         messages = st.container(key="messages", height="stretch", border=False, autoscroll=True)
         with st.container(key="composer"):
             with st.container(key="composer_input", gap=None):
-                prompt = st.chat_input("Напишите, куда хочется сходить… например: тихое кафе с розеткой на час")
+                st.chat_input(
+                    "Напишите, куда хочется сходить… например: тихое кафе с розеткой на час",
+                    key="chat_prompt", on_submit=submit_chat,
+                )
                 st.button(
                     "Микрофон",
                     key="btn_mic",
@@ -1340,9 +1378,6 @@ with col_chat:
                     _html(f'<div class="aw-mic-live">{escape(_voice[1])}</div>')
                 else:
                     st.caption(_voice[1])
-        if prompt and prompt.strip():
-            _ask(prompt.strip())
-
         with messages:
             _html("""
                 <div class="aw-row">
@@ -1358,14 +1393,16 @@ with col_chat:
                 req = RecommendRequest.model_validate_json(entry["req_json"])
                 render_user(entry, req)
                 latest = i == len(entries) - 1
-                if latest:
+                if "response_json" not in entry:
                     loading = st.empty()
                     loading.html(SKELETON_HTML)
-                    resp = run_recommendations(entry["req_json"])
+                    resp = entry_response(entry)
                     loading.empty()
                 else:
-                    resp = run_recommendations(entry["req_json"])
+                    resp = entry_response(entry)
                 render_answer(req, resp, latest=latest)
+                if latest:
+                    render_chat_header(header, resp.used_data.generation_mode)
 
 if col_settings is None:
     with col_right:
@@ -1381,7 +1418,7 @@ if col_settings is None:
             _convo = next(
                 (c for c in st.session_state.convos if c["id"] == st.session_state.active_convo), None,
             )
-            _last = run_recommendations(_convo["entries"][-1]["req_json"]) if _convo and _convo["entries"] else None
+            _last = entry_response(_convo["entries"][-1]) if _convo and _convo["entries"] else None
             if _last is not None and _last.recommendations:
                 render_map(_last, height=420)
                 render_route_timeline(_last)
