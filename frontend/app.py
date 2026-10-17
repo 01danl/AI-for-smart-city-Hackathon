@@ -20,10 +20,12 @@ import pandas as pd
 import pydeck as pdk
 import streamlit as st
 
-try:  # optional runtime helper: accesses navigator.geolocation in the browser
+try:  # optional runtime helpers: browser geolocation + Web Speech API speech-to-text
     from streamlit_js_eval import get_geolocation as _js_get_geolocation
-except ImportError:  # without it the app still works: landmarks + manual coords
+    from streamlit_js_eval import streamlit_js_eval as _js_eval
+except ImportError:  # without them the app still works: landmarks, manual coords, typing
     _js_get_geolocation = None
+    _js_eval = None
 
 ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
@@ -166,6 +168,18 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .st-key-btn_geo button[disabled] {{ opacity: .55; }}
 /* the geolocation component itself is invisible plumbing */
 [class*="st-key-geo_request_"] {{ display: none; }}
+
+/* Voice input: mic button under the composer + pulsing listening hint */
+.st-key-btn_mic {{ margin-top: 2px; }}
+.st-key-btn_mic button {{ width: 100%; justify-content: center; border: 1px solid {LINE};
+    background: {PANEL}; border-radius: 10px; font-weight: 600; font-size: 0.82rem; color: {INK}; }}
+.st-key-btn_mic button:hover {{ border-color: {ACCENT}; color: {ACCENT}; }}
+.st-key-btn_mic button[disabled] {{ opacity: .55; }}
+[class*="st-key-mic_request_"] {{ display: none; }}
+@keyframes aw-pulse {{ 0%, 100% {{ opacity: .25; }} 50% {{ opacity: 1; }} }}
+.aw-mic-live {{ color: {MUTED}; font-size: 0.74rem; margin-top: 6px; }}
+.aw-mic-live::before {{ content: ''; display: inline-block; width: 8px; height: 8px; border-radius: 50%;
+    background: #D92D20; margin-right: 7px; animation: aw-pulse 1.1s infinite; }}
 
 /* Sidebar (ChatGPT-style) */
 .aw-logo {{ width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
@@ -425,11 +439,13 @@ def _ss_get(key: str, default=None):
 def new_chat() -> None:
     """Sidebar callback: go to a blank chat; it joins the history on the first question."""
     st.session_state.active_convo = None
+    _clear_voice_note()
 
 
 def open_convo(convo_id: int) -> None:
     """Sidebar callback: reopen a past conversation."""
     st.session_state.active_convo = convo_id
+    _clear_voice_note()
 
 
 def toggle_settings() -> None:
@@ -442,13 +458,14 @@ def close_settings() -> None:
     st.session_state.show_settings = False
 
 
-def _ask(query: str, preset_id: str | None = None) -> None:
+def _ask(query: str, preset_id: str | None = None, via: str | None = None) -> None:
     ss = st.session_state
     convo = _active_or_new_convo()
     convo["entries"].append({
         "query": query,
         "req_json": _build_request(query).model_dump_json(),
         "start": ss.landmark if ss.landmark != CUSTOM_POINT else "свои координаты",
+        "via": via,
     })
     convo["entries"] = convo["entries"][-MAX_HISTORY:]
     if len(convo["entries"]) == 1:
@@ -493,6 +510,98 @@ def _apply_geo_result(loc: dict, geo_key: str) -> str | None:
     return f"Точка старта из геолокации: ~{r_lat}, {r_lon}{tail} · сырые координаты не сохраняем"
 
 
+# ── Voice input (browser Speech Recognition through streamlit-js-eval) ───────
+
+_VOICE_LANG = {"ru": "ru-RU", "kk": "kk-KZ", "en": "en-US"}
+
+_VOICE_ERROR_HINTS = {
+    "unsupported": "браузер не поддерживает распознавание речи — нужны Chrome, Edge или Safari",
+    "not-allowed": "доступ к микрофону запрещён — разрешите его в настройках браузера",
+    "no-speech": "не расслышал речь — попробуйте ещё раз",
+    "timeout": "не дождался фразы — попробуйте ещё раз",
+    "network": "распознаванию нужна сеть, а она недоступна",
+    "audio-capture": "микрофон не найден",
+    "language-not-supported": "этот язык не распознаётся браузером — смените язык в панели настроек",
+}
+
+# One-shot recognition: click -> speak -> transcript resolves as JSON-ish dict.
+# The wrapper awaits the returned promise and sends the result back to Python.
+_VOICE_JS_TMPL = """
+(function() {
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+    return new Promise((resolve) => {
+        if (!SR) { resolve({error: 'unsupported'}); return; }
+        let rec; let settled = false;
+        const finish = (v) => { if (settled) return; settled = true;
+            try { if (rec) rec.stop(); } catch (e) {} resolve(v); };
+        try {
+            rec = new SR();
+            rec.lang = '__AW_LANG__';
+            rec.interimResults = false;
+            rec.maxAlternatives = 1;
+            rec.onresult = (e) => {
+                const piece = e.results[e.results.length - 1];
+                finish({text: String((piece && piece[0] && piece[0].transcript) || '').trim()});
+            };
+            rec.onerror = (e) => finish({error: String((e && e.error) || 'error')});
+            rec.onend = () => finish({error: 'no-speech'});
+            setTimeout(() => finish({error: 'timeout'}), 20000);
+            rec.start();
+        } catch (err) {
+            finish({error: String((err && err.message) || err)});
+        }
+    });
+})()
+"""
+
+
+def _voice_js(lang: str) -> str:
+    """SpeechRecognition fix as an IIFE promise, tuned to the chat language."""
+    return _VOICE_JS_TMPL.replace("__AW_LANG__", _VOICE_LANG.get(lang, "ru-RU"))
+
+
+def request_voice() -> None:
+    """Mic callback: bump a MONOTONIC serial so every fix gets a fresh component key.
+    Resetting to a reused key would let an already-consumed transcript leak back in."""
+    ss = st.session_state
+    ss.mic_serial = int(_ss_get("mic_serial", 0)) + 1
+    ss.mic_click = ss.mic_serial
+
+
+def _clear_voice_note() -> None:
+    """Drop the last voice status when the user navigates elsewhere."""
+    try:
+        del st.session_state.mic_state
+    except KeyError:
+        pass
+
+
+def _voice_consume() -> None:
+    """Handle the pending speech fix before anything renders: auto-ask or stash a note."""
+    ss = st.session_state
+    click = int(_ss_get("mic_click", 0))
+    if not click or _js_eval is None:
+        return
+    res = _js_eval(js_expressions=_voice_js(_ss_get("lang", "ru")), key=f"mic_request_{click}")
+    if res is None:
+        ss.mic_state = ("listen", "Слушаю… говорите вопрос, пауза завершит фразу.")
+        return
+    text = " ".join(str((res or {}).get("text") or "").split())
+    if len(text) >= 4:
+        ss.mic_click = 0  # consumed: unmount the fix, stop listening until the next click
+        ss.mic_state = ("sent", f"🎙 Распознано и отправлено: «{text}»")
+        _ask(text, via="voice")
+        return
+    if text:
+        ss.mic_click = 0
+        ss.mic_state = ("error", f"🎙 Не расслышал («{text}») — попробуйте ещё раз или напечатайте.")
+        return
+    err = str((res or {}).get("error") or "no-speech")
+    hint = _VOICE_ERROR_HINTS.get(err.lower(), f"не удалось распознать ({err})")
+    ss.mic_click = 0  # any terminal outcome stops the mic loop
+    ss.mic_state = ("error", f"🎙 {hint} — можно напечатать вопрос")
+
+
 if "convos" not in st.session_state:
     st.session_state.convos = []          # [{"id", "title", "entries"}] — история чатов
     st.session_state.active_convo = None  # id открытого чата; None = пустой, как в ChatGPT
@@ -534,6 +643,8 @@ def render_user(entry: dict, req: RecommendRequest) -> None:
     if req.weather != "normal":
         extras.append(WEATHER_LABELS[req.weather].lower())
     meta = " · ".join([f"📍 {escape(entry['start'])}", f"радиус {km} км", *extras])
+    if entry.get("via") == "voice":
+        meta = f"🎙 голос · {meta}"
     _html(f"""
         <div class="aw-row user">
             <div class="aw-bubble user">
@@ -772,6 +883,10 @@ _sync_settings_backup()
 _restore_settings_state()
 r_lat, r_lon = round_coords(st.session_state.lat, st.session_state.lon)
 
+# Voice input: consume the pending speech fix before columns render, so the new
+# voice message is already in the entry list when the chat column is drawn.
+_voice_consume()
+
 with col_side:
     with st.container(key="side"):
         _html(f"""
@@ -882,6 +997,21 @@ with col_chat:
         messages = st.container(key="messages", height=520, border=False, autoscroll=True)
         with st.container(key="composer"):
             prompt = st.chat_input("Напишите, куда хочется сходить… например: тихое кафе с розеткой на час")
+            st.button(
+                "Говорить",
+                key="btn_mic",
+                icon=":material/mic:",
+                on_click=request_voice,
+                use_container_width=True,
+                help="Нажмите и говорите; пауза завершит фразу. В модель уходит только распознанный текст.",
+                disabled=_js_eval is None,
+            )
+            _voice = _ss_get("mic_state") or ("idle", None)
+            if _voice and len(_voice) == 2 and _voice[1]:
+                if _voice[0] == "listen":
+                    _html(f'<div class="aw-mic-live">{escape(_voice[1])}</div>')
+                else:
+                    st.caption(_voice[1])
         if prompt and prompt.strip():
             _ask(prompt.strip())
 
