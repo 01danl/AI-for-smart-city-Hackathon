@@ -1,7 +1,8 @@
 """Streamlit demo UI for Astana Walk AI (Build with AI · Smart City Track).
 
-Chat layout: icon rail on the left, conversation in the middle, scenarios and
-settings on the right.
+ChatGPT-style layout: left sidebar with "Новый чат", scenario shortcuts and a
+revisitable conversation history; the chat itself on the right, walk settings
+collapsed at the bottom of the sidebar.
 
 Launch with:
     streamlit run frontend/app.py
@@ -128,23 +129,22 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .block-container {{ padding: 1rem 1.2rem 1rem; max-width: 1480px; }}
 
 /* Panels */
-.st-key-rail, .st-key-chat, .st-key-side {{ background: {PANEL}; border: 1px solid {LINE}; }}
-.st-key-rail {{ border-radius: 18px 0 0 18px; border-right: none; min-height: calc(100dvh - 32px);
-                padding: 18px 0 !important; align-items: center; }}
-.st-key-chat {{ border-radius: 0; background: {PAGE}; padding: 0 0 12px 0 !important;
-                min-height: calc(100dvh - 32px); }}
-.st-key-side {{ border-radius: 0 18px 18px 0; border-left: none;
-                min-height: calc(100dvh - 32px); padding: 18px 0 !important; }}
+.st-key-side, .st-key-chat {{ background: {PANEL}; border: 1px solid {LINE}; border-radius: 18px; }}
+.st-key-side {{ min-height: calc(100dvh - 32px); padding: 16px 14px 14px !important; }}
+.st-key-chat {{ background: {PAGE}; padding: 0 0 12px 0 !important; min-height: calc(100dvh - 32px); }}
 
-/* Rail */
-.aw-rail {{ display: flex; flex-direction: column; align-items: center; gap: 14px; height: 100%; }}
+/* Sidebar (ChatGPT-style) */
 .aw-logo {{ width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
             background: linear-gradient(140deg, #6C5CF6, #4338CA); color: #fff; font-weight: 700;
-            font-size: 18px; margin-bottom: 22px; box-shadow: 0 6px 14px rgba(81,70,229,.28); }}
-.aw-rail-item {{ width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
-                 color: {MUTED}; }}
-.aw-rail-item.active {{ background: {ACCENT_SOFT}; color: {ACCENT}; }}
-.aw-rail-spacer {{ flex: 1; min-height: 220px; }}
+            font-size: 18px; flex: none; box-shadow: 0 6px 14px rgba(81,70,229,.28); }}
+.aw-brand {{ display: flex; align-items: center; gap: 10px; padding: 0 4px 14px; }}
+.aw-brand-name {{ font-weight: 700; color: {INK}; font-size: 0.98rem; letter-spacing: -0.01em; }}
+.aw-brand-sub {{ font-size: 0.7rem; color: {SUBTLE}; margin-top: 1px; }}
+.st-key-btn_newchat {{ margin-bottom: 10px; }}
+.st-key-btn_newchat button {{ width: 100%; justify-content: flex-start; border: 1px solid {LINE};
+    background: {PANEL}; border-radius: 10px; font-weight: 600; font-size: 0.88rem; color: {INK}; }}
+.st-key-btn_newchat button:hover {{ border-color: {ACCENT}; color: {ACCENT}; }}
+.st-key-btn_newchat button p {{ text-align: left; }}
 
 /* Chat header */
 .aw-head {{ display: flex; align-items: center; justify-content: space-between; gap: 12px;
@@ -226,20 +226,10 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 [data-testid="stChatInputSubmitButton"] {{ background: {ACCENT} !important; color: #fff !important;
                                            border-radius: 10px !important; }}
 
-/* Right panel */
-.aw-privacy-strip {{ padding: 0 22px 14px 22px; border-bottom: 1px solid {LINE};
+/* Sidebar */
+.aw-privacy-strip {{ padding: 2px 6px 12px 6px; border-top: 1px solid {LINE}; margin-top: 14px;
                      font-size: 0.75rem; color: {MUTED}; line-height: 1.45; }}
 .aw-privacy-strip .mono {{ color: {SUBTLE}; }}
-.st-key-side .st-key-side_view {{ padding: 0 22px 12px 22px; }}
-.st-key-side .st-key-view_main, .st-key-side .st-key-view_settings {{
-    padding: 0 22px; min-width: 0; box-sizing: border-box;
-}}
-.st-key-side .st-key-side_view button {{ font-weight: 600; font-size: 0.86rem; border-radius: 9px; }}
-.st-key-rail .st-key-btn_rail_settings {{ display: flex; justify-content: center; }}
-.st-key-rail .st-key-btn_rail_settings button {{ width: 40px; min-width: 40px; height: 40px; padding: 0;
-    border: none; border-radius: 12px; background: transparent; color: {MUTED}; }}
-.st-key-rail .st-key-btn_rail_settings button:hover {{ background: {ACCENT_SOFT}; color: {ACCENT}; }}
-.st-key-rail .st-key-btn_rail_settings button p {{ display: none; }}
 .aw-side-title {{ font-weight: 700; color: {INK}; font-size: 0.98rem; margin: 14px 0 6px 0; }}
 .aw-side-sep {{ border-top: 1px solid {LINE}; margin: 14px 0 0; }}
 
@@ -252,16 +242,20 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .st-key-presets .stButton button p {{ text-align: left; white-space: normal; overflow-wrap: anywhere; }}
 .st-key-presets [data-testid="stVerticalBlock"] {{ gap: 2px; }}
 
-.aw-recent {{ display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; font-size: 0.86rem;
-              color: {INK}; border-bottom: 1px solid #F4F5F8; }}
-.aw-recent span:first-child {{ min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
-.aw-recent span:last-child {{ color: {SUBTLE}; font-size: 0.76rem; flex: none; }}
-.aw-recent.current span:first-child {{ color: {ACCENT}; font-weight: 600; }}
+/* Chat-history list (ChatGPT-style) */
+.st-key-chats .stButton button {{ justify-content: flex-start; border: none; background: transparent;
+    color: {INK}; font-weight: 500; font-size: 0.87rem; padding: 9px 12px; border-radius: 10px; }}
+.st-key-chats .stButton button:hover {{ background: {ACCENT_SOFT}; color: {INK}; }}
+.st-key-chats .stButton button > div, .st-key-chats .stButton button [data-testid="stMarkdownContainer"] {{
+    justify-content: flex-start; min-width: 0; text-align: left; }}
+.st-key-chats .stButton button p {{ text-align: left; white-space: nowrap; overflow: hidden;
+    text-overflow: ellipsis; max-width: 100%; }}
+.st-key-chats [data-testid="stVerticalBlock"] {{ gap: 2px; }}
+
 .aw-empty-side {{ font-size: 0.82rem; color: {SUBTLE}; padding: 6px 0; }}
 .aw-foot {{ font-size: 0.74rem; color: {SUBTLE}; margin-top: 12px; }}
 
 @media (max-width: 900px) {{
-    .st-key-rail {{ display: none; }}
     .st-key-chat, .st-key-side {{ border-radius: 18px; border: 1px solid {LINE}; min-height: 0; }}
     .st-key-messages, .st-key-composer {{ padding-left: 12px; padding-right: 12px; }}
     .aw-head {{ padding: 14px; flex-direction: column; align-items: flex-start; }}
@@ -319,14 +313,55 @@ def _build_request(query: str) -> RecommendRequest:
     )
 
 
+def _truncate(text: str, limit: int) -> str:
+    """Compact one-line title for the chat list, like ChatGPT auto-titles."""
+    text = " ".join(text.split())
+    return text if len(text) <= limit else text[: limit - 1].rstrip() + "…"
+
+
+def _active_or_new_convo() -> dict:
+    """Conversation in progress, or a fresh one created lazily on the first question."""
+    ss = st.session_state
+    for convo in ss.convos:
+        if convo["id"] == ss.active_convo:
+            return convo
+    convo = {"id": ss.next_convo_id, "title": "Новый чат", "entries": []}
+    ss.next_convo_id += 1
+    ss.convos.append(convo)
+    ss.active_convo = convo["id"]
+    return convo
+
+
+def _convo_label(convo: dict, limit: int = 24) -> str:
+    label = _truncate(convo["title"], limit)
+    time_str = ""
+    if convo["entries"]:
+        now_iso = json.loads(convo["entries"][-1]["req_json"]).get("now_iso") or ""
+        time_str = now_iso[11:16]
+    return f"{label} · {time_str}" if time_str else label
+
+
+def new_chat() -> None:
+    """Sidebar callback: go to a blank chat; it joins the history on the first question."""
+    st.session_state.active_convo = None
+
+
+def open_convo(convo_id: int) -> None:
+    """Sidebar callback: reopen a past conversation."""
+    st.session_state.active_convo = convo_id
+
+
 def _ask(query: str, preset_id: str | None = None) -> None:
     ss = st.session_state
-    ss.history.append({
+    convo = _active_or_new_convo()
+    convo["entries"].append({
         "query": query,
         "req_json": _build_request(query).model_dump_json(),
         "start": ss.landmark if ss.landmark != CUSTOM_POINT else "свои координаты",
     })
-    ss.history = ss.history[-MAX_HISTORY:]
+    convo["entries"] = convo["entries"][-MAX_HISTORY:]
+    if len(convo["entries"]) == 1:
+        convo["title"] = _truncate(query, 38)
     ss.active_preset = preset_id
 
 
@@ -336,24 +371,20 @@ def run_preset(preset: dict) -> None:
     _ask(preset["query"], preset["id"])
 
 
-def open_settings() -> None:
-    """Rail gear callback: switch the right panel to the settings section."""
-    st.session_state.side_view = "Настройки"
-
-
 def apply_landmark() -> None:
     name = st.session_state.landmark
     if name in LANDMARK_POINTS:
         st.session_state.lat, st.session_state.lon, _ = LANDMARK_POINTS[name]
 
 
-if "history" not in st.session_state:
-    st.session_state.history = []
+if "convos" not in st.session_state:
+    st.session_state.convos = []          # [{"id", "title", "entries"}] — история чатов
+    st.session_state.active_convo = None  # id открытого чата; None = пустой, как в ChatGPT
+    st.session_state.next_convo_id = 1
     st.session_state.active_preset = None
     st.session_state.lang = "ru"
     st.session_state.include_route = True
     st.session_state.auto_anchor = True
-    st.session_state.side_view = "Главное"
     _load_settings(OFFICIAL_PRESETS[0])
 
 
@@ -609,39 +640,123 @@ def render_inspector(req: RecommendRequest, resp: RecommendResponse) -> None:
     st.code(msgs[1]["content"], language="json", wrap_lines=True)
 
 
-# ── Layout: rail | chat | side panel ─────────────────────────────────────────
 
-col_rail, col_chat, col_side = st.columns([0.055, 0.665, 0.28], gap=None)
+# ── Layout: ChatGPT-style sidebar | chat ─────────────────────────────────────
 
-with col_rail:
-    with st.container(key="rail"):
-        _html("""
-            <div class="aw-rail">
+col_side, col_chat = st.columns([0.235, 0.765], gap=None)
+
+with col_side:
+    r_lat, r_lon = round_coords(st.session_state.lat, st.session_state.lon)
+    with st.container(key="side"):
+        _html(f"""
+            <div class="aw-brand">
                 <div class="aw-logo">A</div>
-                <div class="aw-rail-item active" title="Чат"><span class="msi">chat_bubble</span></div>
-                <div class="aw-rail-item" title="Карта"><span class="msi">map</span></div>
-                <div class="aw-rail-item" title="Маршруты"><span class="msi">route</span></div>
-                <div class="aw-rail-item" title="Места"><span class="msi">location_on</span></div>
-                <div class="aw-rail-item" title="Приватность"><span class="msi">shield_lock</span></div>
-                <div class="aw-rail-spacer"></div>
+                <div>
+                    <div class="aw-brand-name">Astana Walk</div>
+                    <div class="aw-brand-sub">куда сходить рядом</div>
+                </div>
             </div>
             """)
         st.button(
-            "Настройки",
-            key="btn_rail_settings",
-            icon=":material/settings:",
-            help="Настройки прогулки: точка старта, радиус, время, погода",
-            on_click=open_settings,
+            "Новый чат",
+            key="btn_newchat",
+            icon=":material/add_comment:",
+            on_click=new_chat,
+            use_container_width=True,
+            help="Начать новый разговор; прошлые чаты останутся в истории ниже",
         )
-        if st.session_state.get("side_view") == "Настройки":
-            _html(f"""<style>.st-key-btn_rail_settings button {{
-                    background: {ACCENT_SOFT} !important; color: {ACCENT} !important; }}</style>""")
+
+        st.markdown('<div class="aw-side-title">Сценарии</div>', unsafe_allow_html=True)
+        with st.container(key="presets"):
+            for idx, preset in enumerate(OFFICIAL_PRESETS):
+                st.button(
+                    preset["title"].split(". ", 1)[-1],
+                    key=f"btn_{preset['id']}",
+                    icon=PRESET_ICONS[idx % len(PRESET_ICONS)],
+                    on_click=run_preset,
+                    args=(preset,),
+                    use_container_width=True,
+                )
+        if st.session_state.active_preset:
+            _html(f"""<style>.st-key-btn_{st.session_state.active_preset} button {{
+                    background: {ACCENT_SOFT} !important; border-left-color: {ACCENT} !important;
+                    font-weight: 600 !important; }}</style>""")
+
+        st.markdown('<div class="aw-side-sep"></div><div class="aw-side-title">История чатов</div>',
+                    unsafe_allow_html=True)
+        convos = st.session_state.convos
+        if convos:
+            with st.container(key="chats"):
+                for convo in reversed(convos):
+                    st.button(
+                        _convo_label(convo),
+                        key=f"btn_convo_{convo['id']}",
+                        icon=":material/chat_bubble:",
+                        on_click=open_convo,
+                        args=(convo["id"],),
+                        use_container_width=True,
+                    )
+            current = st.session_state.active_convo
+            if current is not None:
+                _html(f"""<style>.st-key-btn_convo_{current} button {{
+                        background: {ACCENT_SOFT} !important; color: {ACCENT} !important;
+                        font-weight: 600 !important; }}</style>""")
+        else:
+            st.markdown(
+                '<div class="aw-empty-side">Пока нет чатов. Задайте вопрос — и он появится здесь.</div>',
+                unsafe_allow_html=True,
+            )
+
+        with st.expander("Настройки прогулки", icon=":material/settings:"):
+            st.selectbox(
+                "Точка старта",
+                options=list(LANDMARK_POINTS.keys()) + [CUSTOM_POINT],
+                key="landmark",
+                on_change=apply_landmark,
+                help="Можно выбрать ориентир вместо GPS: так не нужно раскрывать, где вы находитесь.",
+            )
+            if st.session_state.landmark in LANDMARK_POINTS:
+                st.caption(LANDMARK_POINTS[st.session_state.landmark][2])
+            with st.expander("Точные координаты", expanded=st.session_state.landmark == CUSTOM_POINT):
+                c1, c2 = st.columns(2)
+                c1.number_input("Широта", key="lat", format="%.4f", step=0.002)
+                c2.number_input("Долгота", key="lon", format="%.4f", step=0.002)
+                st.caption(f"В логи и API попадает только округление до ~100 м: `{r_lat}, {r_lon}`")
+            st.slider("Радиус пешком, м", min_value=300, max_value=6000, step=100, key="max_distance_m")
+            d1, d2 = st.columns([1.15, 1])
+            d1.date_input("Дата", key="visit_date", format="DD.MM.YYYY")
+            d2.time_input("Время", key="visit_time", step=900)
+            st.caption("Время Астаны (UTC+5). Влияет на статус «открыто / закрыто».")
+            st.selectbox("Погода", options=list(WEATHER_LABELS), format_func=WEATHER_LABELS.get, key="weather")
+            g1, g2 = st.columns(2)
+            g1.number_input("Сколько человек", min_value=1, max_value=15, key="group_size")
+            g2.selectbox("Язык ответа", options=list(LANG_LABELS), format_func=LANG_LABELS.get, key="lang")
+            st.toggle("Без ступенек: коляска, дети", key="accessible")
+            st.toggle("Собрать маршрут из 2–3 мест", key="include_route")
+            st.toggle("Понимать ориентиры из текста запроса", key="auto_anchor",
+                      help="Например, «я возле Хан Шатыра» сдвинет точку старта к ТРЦ.")
+            st.markdown(
+                f'<div class="aw-foot">Применяются к следующему вопросу. База: {len(load_pois())} мест · '
+                f"OpenStreetMap + Visit Astana · поиск <span class=\"mono\">{BACKEND}</span></div>",
+                unsafe_allow_html=True,
+            )
+
+        _html(f"""
+            <div class="aw-privacy-strip">
+                Точка поиска: <span class="mono">{r_lat}, {r_lon}</span> — округлена до ~100 м.
+                Точные координаты не хранятся и не отправляются в модель.
+            </div>
+            """)
 
 with col_chat:
     with st.container(key="chat"):
+        convo = next(
+            (c for c in st.session_state.convos if c["id"] == st.session_state.active_convo), None,
+        )
+        entries = convo["entries"] if convo else []
         last_mode = None
-        if st.session_state.history:
-            last_mode = run_recommendations(st.session_state.history[-1]["req_json"]).used_data.generation_mode
+        if entries:
+            last_mode = run_recommendations(entries[-1]["req_json"]).used_data.generation_mode
         mode_label = "нейросеть" if last_mode and "llm" in last_mode.lower() else "шаблоны"
         _html(f"""
             <div class="aw-head">
@@ -674,99 +789,10 @@ with col_chat:
                     </div>
                 </div>
                 """)
-            history = st.session_state.history
-            for i, entry in enumerate(history):
+            for i, entry in enumerate(entries):
                 req = RecommendRequest.model_validate_json(entry["req_json"])
                 render_user(entry, req)
-                latest = i == len(history) - 1
+                latest = i == len(entries) - 1
                 with st.spinner("Подбираю места…"):
                     resp = run_recommendations(entry["req_json"])
                 render_answer(req, resp, latest=latest)
-
-with col_side:
-    with st.container(key="side"):
-        r_lat, r_lon = round_coords(st.session_state.lat, st.session_state.lon)
-        _html(f"""
-            <div class="aw-privacy-strip">
-                Точка поиска: <span class="mono">{r_lat}, {r_lon}</span> — округлена до ~100 м.
-                Точные координаты не хранятся и не отправляются в модель.
-            </div>
-            """)
-        view = st.segmented_control(
-            "Раздел панели",
-            ["Главное", "Настройки"],
-            key="side_view",
-            label_visibility="collapsed",
-        )
-        view = view or "Главное"
-
-        with st.container(key="view_main"):
-            st.markdown('<div class="aw-side-title">Сценарии</div>', unsafe_allow_html=True)
-            with st.container(key="presets"):
-                for idx, preset in enumerate(OFFICIAL_PRESETS):
-                    st.button(
-                        preset["title"].split(". ", 1)[-1],
-                        key=f"btn_{preset['id']}",
-                        icon=PRESET_ICONS[idx % len(PRESET_ICONS)],
-                        on_click=run_preset,
-                        args=(preset,),
-                        use_container_width=True,
-                    )
-            if st.session_state.active_preset:
-                _html(f"""<style>.st-key-btn_{st.session_state.active_preset} button {{
-                        background: {ACCENT_SOFT} !important; border-left-color: {ACCENT} !important;
-                        font-weight: 600 !important; }}</style>""")
-            st.markdown('<div class="aw-side-sep"></div><div class="aw-side-title">Недавние запросы</div>',
-                        unsafe_allow_html=True)
-            history = st.session_state.history
-            if history:
-                rows = []
-                for i, entry in enumerate(reversed(history)):
-                    req_time = json.loads(entry["req_json"]).get("now_iso") or ""
-                    cls = "aw-recent current" if i == 0 else "aw-recent"
-                    rows.append(f'<div class="{cls}"><span>{escape(entry["query"])}</span>'
-                                f"<span>{req_time[11:16]}</span></div>")
-                st.markdown("".join(rows[:8]), unsafe_allow_html=True)
-            else:
-                st.markdown('<div class="aw-empty-side">Пока пусто. Задайте вопрос или выберите сценарий.</div>',
-                            unsafe_allow_html=True)
-
-        with st.container(key="view_settings"):
-            st.selectbox(
-                "Точка старта",
-                options=list(LANDMARK_POINTS.keys()) + [CUSTOM_POINT],
-                key="landmark",
-                on_change=apply_landmark,
-                help="Можно выбрать ориентир вместо GPS: так не нужно раскрывать, где вы находитесь.",
-            )
-            if st.session_state.landmark in LANDMARK_POINTS:
-                st.caption(LANDMARK_POINTS[st.session_state.landmark][2])
-            with st.expander("Точные координаты", expanded=st.session_state.landmark == CUSTOM_POINT):
-                c1, c2 = st.columns(2)
-                c1.number_input("Широта", key="lat", format="%.4f", step=0.002)
-                c2.number_input("Долгота", key="lon", format="%.4f", step=0.002)
-                st.caption(f"В логи и API попадает только округление до ~100 м: `{r_lat}, {r_lon}`")
-            st.slider("Радиус пешком, м", min_value=300, max_value=6000, step=100, key="max_distance_m")
-            d1, d2 = st.columns([1.15, 1])
-            d1.date_input("Дата", key="visit_date", format="DD.MM.YYYY")
-            d2.time_input("Время", key="visit_time", step=900)
-            st.caption("Время Астаны (UTC+5). Влияет на статус «открыто / закрыто».")
-            st.selectbox("Погода", options=list(WEATHER_LABELS), format_func=WEATHER_LABELS.get, key="weather")
-            g1, g2 = st.columns(2)
-            g1.number_input("Сколько человек", min_value=1, max_value=15, key="group_size")
-            g2.selectbox("Язык ответа", options=list(LANG_LABELS), format_func=LANG_LABELS.get, key="lang")
-            st.toggle("Без ступенек: коляска, дети", key="accessible")
-            st.toggle("Собрать маршрут из 2–3 мест", key="include_route")
-            st.toggle("Понимать ориентиры из текста запроса", key="auto_anchor",
-                      help="Например, «я возле Хан Шатыра» сдвинет точку старта к ТРЦ.")
-            st.markdown(
-                f'<div class="aw-foot">Настройки применяются к следующему вопросу. '
-                f"База: {len(load_pois())} мест · OpenStreetMap + Visit Astana · поиск "
-                f'<span class="mono">{BACKEND}</span></div>',
-                unsafe_allow_html=True,
-            )
-
-        # Both sections stay rendered (so widget state survives switching); only the
-        # inactive one is hidden. The gear button in the rail switches this same state.
-        hidden = "view_settings" if view != "Настройки" else "view_main"
-        _html(f"<style>.st-key-{hidden} {{ display: none; }}</style>")
