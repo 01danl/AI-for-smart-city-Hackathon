@@ -172,19 +172,17 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
     display: flex; justify-content: flex-end; margin: 0; z-index: 2; }}
 .st-key-gearrow .stButton {{ flex: none; }}
 .st-key-btn_gear {{ display: flex; justify-content: flex-end; }}
-.st-key-btn_gear button {{ width: 38px; min-width: 38px; height: 38px; padding: 0;
+.st-key-btn_gear button {{ width: 38px; min-width: 38px; height: 38px; min-height: 38px; padding: 0;
     border: none; background: transparent; color: {MUTED}; border-radius: 10px; }}
 .st-key-btn_gear button:hover {{ background: {ACCENT_SOFT}; color: {ACCENT}; }}
-.st-key-btn_gear button p {{ display: none; }}
 .aw-settings-head {{ display: flex; align-items: center; gap: 8px; padding: 4px 4px 10px;
                      border-bottom: 1px solid {LINE}; margin-bottom: 4px; }}
 .aw-settings-title {{ font-weight: 700; color: {INK}; font-size: 0.98rem; }}
 .aw-settings-sub {{ font-size: 0.72rem; color: {SUBTLE}; margin-top: 2px; }}
 .st-key-btn_close_settings {{ display: flex; justify-content: flex-end; padding-top: 2px; }}
-.st-key-btn_close_settings button {{ width: 32px; min-width: 32px; height: 32px; padding: 0;
+.st-key-btn_close_settings button {{ width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 0;
     border: none; background: transparent; color: {MUTED}; border-radius: 8px; }}
 .st-key-btn_close_settings button:hover {{ background: #FDECEA; color: #B42318; }}
-.st-key-btn_close_settings button p {{ display: none; }}
 
 /* Find-my-location button (first control in the drawer) */
 .st-key-btn_geo {{ margin: 8px 0 2px; }}
@@ -204,8 +202,16 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .st-key-btn_mic button:hover {{ background: {ACCENT}; color: #fff; filter: brightness(.92); }}
 .st-key-btn_mic button:focus-visible {{ outline: 2px solid {ACCENT}; outline-offset: 3px; }}
 .st-key-btn_mic button[disabled] {{ opacity: .5; }}
-.st-key-btn_mic button p {{ position: absolute; width: 1px; height: 1px; padding: 0;
-    overflow: hidden; clip-path: inset(50%); white-space: nowrap; }}
+/* Remove the hidden label from flex layout: its gap otherwise shifts the icon. */
+.st-key-btn_gear button, .st-key-btn_mic button, .st-key-btn_close_settings button {{
+    display: flex; align-items: center; justify-content: center; gap: 0;
+}}
+.st-key-btn_gear button [data-testid="stMarkdownContainer"],
+.st-key-btn_mic button [data-testid="stMarkdownContainer"],
+.st-key-btn_close_settings button [data-testid="stMarkdownContainer"] {{
+    position: absolute; width: 1px; height: 1px; padding: 0;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}}
 [class*="st-key-mic_request_"], [class*="st-key-mic_capture_"] {{ display: none; }}
 @keyframes aw-pulse {{ 0%, 100% {{ opacity: .25; }} 50% {{ opacity: 1; }} }}
 .aw-mic-live {{ color: {MUTED}; font-size: 0.74rem; margin-top: 6px; }}
