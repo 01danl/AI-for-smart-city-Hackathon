@@ -143,6 +143,52 @@ TEXT: dict[str, dict[str, str]] = {
     "stop_visit": {"ru": "На месте", "kk": "Орнында", "en": "There"},
     "stop_offset": {"ru": "От старта", "kk": "Бастаудан", "en": "From start"},
 
+    # Share
+    "share_btn": {"ru": "На телефон", "kk": "Телефонға", "en": "To phone"},
+    "share_hint": {"ru": "Наведите камеру телефона — маршрут откроется в Google Maps от того места, где вы стоите.",
+                   "kk": "Телефон камерасын бағыттаңыз — бағыт Google Maps-та сіз тұрған жерден ашылады.",
+                   "en": "Point your phone camera here — the route opens in Google Maps from where you stand."},
+    "share_privacy": {"ru": "В ссылке только координаты мест, вашей точки там нет.",
+                      "kk": "Сілтемеде тек орындардың координаттары бар, сіздің нүктеңіз жоқ.",
+                      "en": "The link has only the places' coordinates, not yours."},
+    "share_open": {"ru": "Открыть в Google Maps", "kk": "Google Maps-та ашу", "en": "Open in Google Maps"},
+    "share_big": {"ru": "Показать крупно", "kk": "Үлкейтіп көрсету", "en": "Show large"},
+
+    # Feedback
+    "fb_up": {"ru": "Подходит", "kk": "Сәйкес келеді", "en": "Good pick"},
+    "fb_down": {"ru": "Не то", "kk": "Сәйкес емес", "en": "Not right"},
+    "fb_reason_closed": {"ru": "Закрыто", "kk": "Жабық", "en": "Closed"},
+    "fb_reason_far": {"ru": "Далеко", "kk": "Алыс", "en": "Too far"},
+    "fb_reason_irrelevant": {"ru": "Не то, что просил", "kk": "Сұрағаным емес", "en": "Not what I asked"},
+    "fb_reason_wrong_data": {"ru": "Неверные данные", "kk": "Деректер қате", "en": "Wrong data"},
+    "fb_thanks": {"ru": "Спасибо! Оценка учтена анонимно.", "kk": "Рахмет! Бағаңыз анонимді түрде ескерілді.",
+                  "en": "Thanks! Your rating was saved anonymously."},
+    "fb_closed_warning": {"ru": "⚠ Пользователи сообщили, что место закрыто: {n}",
+                          "kk": "⚠ Пайдаланушылар орынның жабық екенін хабарлады: {n}",
+                          "en": "⚠ Users reported this place as closed: {n}"},
+    "fb_summary": {"ru": "Отзывы пользователей: {votes} оценок, {pct}% 👍, мест с пометкой «закрыто»: {closed}. "
+                         "Оценки сдвигают место в выдаче максимум на несколько позиций.",
+                   "kk": "Пайдаланушы пікірлері: {votes} баға, {pct}% 👍, «жабық» деп белгіленген орын: {closed}. "
+                         "Бағалар орынды тізімде бірнеше позицияға ғана жылжытады.",
+                   "en": "User feedback: {votes} ratings, {pct}% 👍, places marked closed: {closed}. "
+                         "Ratings move a place by a few positions at most."},
+
+    # Events
+    "ev_title": {"ru": "Рядом в это время", "kk": "Осы уақытта жақын жерде", "en": "Nearby around this time"},
+    "ev_temporary": {"ru": "Временное событие", "kk": "Уақытша іс-шара", "en": "Temporary event"},
+    "ev_soon": {"ru": "Начнётся через {t}", "kk": "{t} кейін басталады", "en": "Starts in {t}"},
+    "ev_ongoing": {"ru": "Идёт сейчас", "kk": "Қазір жүріп жатыр", "en": "On now"},
+    "ev_later": {"ru": "Начало в {time}", "kk": "Басталуы {time}", "en": "Starts at {time}"},
+    "ev_source": {"ru": "Источник: официальная афиша, проверено {date}",
+                  "kk": "Дереккөз: ресми афиша, тексерілді {date}",
+                  "en": "Source: official listing, checked {date}"},
+    "ev_note": {"ru": "Расписание может измениться — уточните на сайте перед выходом.",
+                "kk": "Кесте өзгеруі мүмкін — шығар алдында сайттан нақтылаңыз.",
+                "en": "Schedules can change — check the site before you go."},
+    "dur_h": {"ru": "{h} ч", "kk": "{h} сағ", "en": "{h} h"},
+    "dur_hm": {"ru": "{h} ч {m} мин", "kk": "{h} сағ {m} мин", "en": "{h} h {m} min"},
+    "dur_m": {"ru": "{m} мин", "kk": "{m} мин", "en": "{m} min"},
+
     # Inspector
     "how_caption": {"ru": "Сначала поиск находит реальные места рядом, затем нейросеть пишет объяснение только по ним.",
                     "kk": "Алдымен іздеу жақын маңдағы нақты орындарды табады, содан кейін нейрожелі тек солар "
@@ -262,6 +308,15 @@ CATEGORY: dict[str, dict[str, str]] = {
     "zoo": {"ru": "Зоопарк", "kk": "Хайуанаттар бағы", "en": "Zoo"},
 }
 
+EVENT_KIND: dict[str, dict[str, str]] = {
+    "performance": {"ru": "🎭 Спектакль", "kk": "🎭 Қойылым", "en": "🎭 Performance"},
+    "concert": {"ru": "🎵 Концерт", "kk": "🎵 Концерт", "en": "🎵 Concert"},
+    "match": {"ru": "⚽ Матч", "kk": "⚽ Матч", "en": "⚽ Match"},
+    "exhibition": {"ru": "🖼 Выставка", "kk": "🖼 Көрме", "en": "🖼 Exhibition"},
+    "festival": {"ru": "🎪 Фестиваль", "kk": "🎪 Фестиваль", "en": "🎪 Festival"},
+    "show": {"ru": "✨ Шоу", "kk": "✨ Шоу", "en": "✨ Show"},
+}
+
 WEATHER: dict[str, dict[str, str]] = {
     "normal": {"ru": "Комфортная погода", "kk": "Жайлы ауа райы", "en": "Pleasant weather"},
     "cold_windy": {"ru": "Мороз или сильный ветер", "kk": "Аяз немесе қатты жел", "en": "Frost or strong wind"},
@@ -336,6 +391,11 @@ PRESET: dict[str, dict[str, tuple[str, str]]] = {
         "kk": ("Ерекше түнгі демалыс", "Түнде екі сағатқа ерекше бір іс-шара іздеп жүрмін."),
         "en": ("Something unusual at night", "Looking for something unusual to do tonight for a couple of hours."),
     },
+    "preset_evening_events": {
+        "ru": ("Вечер в городе: что идёт сегодня", "Чем заняться сегодня вечером? Хочется чего-то культурного рядом."),
+        "kk": ("Қаладағы кеш: бүгін не өтеді", "Бүгін кешке немен айналысуға болады? Жақын жерде мәдени бірдеңе қалаймын."),
+        "en": ("Evening in the city: what's on tonight", "What can I do tonight? I'd like something cultural nearby."),
+    },
     "preset_expo_unusual": {
         "ru": ("У здания Экспо 2017 (необычное на 1–2 часа)",
                "Я у здании Экспо 2017, хочу что-то необычное на 1–2 часа, пешком."),
@@ -392,6 +452,17 @@ def source_label(source: str, lang: str | None) -> str:
 
 def category_label(category: str, lang: str | None) -> str:
     return _pick(CATEGORY, category, lang, category)
+
+
+def event_kind_label(kind: str, lang: str | None) -> str:
+    return _pick(EVENT_KIND, kind, lang, kind)
+
+
+def duration_text(minutes: int, lang: str | None) -> str:
+    h, m = divmod(max(0, minutes), 60)
+    if h and m:
+        return t("dur_hm", lang, h=h, m=m)
+    return t("dur_h", lang, h=h) if h else t("dur_m", lang, m=m)
 
 
 def weather_label(weather: str, lang: str | None) -> str:
