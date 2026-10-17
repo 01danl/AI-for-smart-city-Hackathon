@@ -10,6 +10,7 @@ Launch with:
 
 from __future__ import annotations
 
+import base64
 import json
 import sys
 from datetime import date, datetime, time
@@ -31,6 +32,17 @@ ROOT = Path(__file__).resolve().parents[1]
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+LOGO_SVG = (ROOT / "design.svg").read_text(encoding="utf-8")
+LOGO_URL = "data:image/svg+xml;base64," + base64.b64encode(
+    LOGO_SVG.replace('width="100%"', 'width="430"').encode()
+).decode()
+# Reuse the supplied navigation mark as the tab icon without shrinking the wordmark.
+LOGO_MARK = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="12 0 88 88">'
+    + LOGO_SVG[LOGO_SVG.index("<g"):LOGO_SVG.index("</g>") + 4]
+    + '</svg>'
+)
+
 from backend.generation import (  # noqa: E402
     OFFICIAL_PRESETS,
     RecommendRequest,
@@ -46,7 +58,7 @@ from backend.retrieval.index import load_pois  # noqa: E402
 
 st.set_page_config(
     page_title="Astana Walk · прогулки по Астане",
-    page_icon="🧭",
+    page_icon=LOGO_MARK,
     layout="wide",
     initial_sidebar_state="collapsed",
 )
@@ -59,8 +71,8 @@ SUBTLE = "#98A2B3"
 LINE = "#ECEEF3"
 PANEL = "#FFFFFF"
 PAGE = "#F6F7FB"
-ACCENT = "#5146E5"
-ACCENT_SOFT = "#EEEDFD"
+ACCENT = "#0284C7"
+ACCENT_SOFT = "#E0F2FE"
 
 # (label, text color, background)
 STATUS_STYLE: dict[str, tuple[str, str, str]] = {
@@ -79,7 +91,7 @@ SOURCE_STYLE: dict[str, tuple[str, str]] = {
 STATUS_RGB: dict[str, list[int]] = {
     "confirmed_open": [18, 122, 75, 235],
     "likely_open": [148, 98, 0, 235],
-    "unknown": [81, 70, 229, 235],
+    "unknown": [2, 132, 199, 235],
     "likely_closed": [180, 35, 24, 235],
 }
 
@@ -138,14 +150,26 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .block-container {{ padding: 1rem 1.2rem 1rem; max-width: 1480px; }}
 
 /* Panels */
+[data-testid="stLayoutWrapper"]:has(> .st-key-side),
+[data-testid="stLayoutWrapper"]:has(> .st-key-settings),
+[data-testid="stLayoutWrapper"]:has(> .st-key-chat) {{
+    height: calc(100dvh - 32px) !important; min-height: 0;
+}}
 .st-key-side, .st-key-settings, .st-key-chat {{ background: {PANEL}; border: 1px solid {LINE};
-                                                border-radius: 18px; }}
-.st-key-side, .st-key-settings {{ min-height: calc(100dvh - 32px); padding: 16px 14px 14px !important;
+    border-radius: 18px; height: 100% !important; min-height: 0; box-sizing: border-box; }}
+.st-key-side, .st-key-settings {{ padding: 16px !important;
                                   overflow-y: auto; }}
-.st-key-chat {{ background: {PAGE}; padding: 0 0 12px 0 !important; min-height: calc(100dvh - 32px); }}
+.st-key-chat {{ position: relative; background: {PAGE}; padding: 0 0 12px !important; overflow: hidden; }}
+.st-key-app_layout > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] {{
+    align-items: stretch;
+}}
+.st-key-app_layout > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] > [data-testid="stColumn"] {{
+    min-width: 0;
+}}
 
 /* Settings drawer (top-right gear -> panel on the right) */
-.st-key-gearrow {{ display: flex; justify-content: flex-end; margin: 2px 0 4px; }}
+.st-key-gearrow {{ position: absolute; top: 16px; right: 16px; width: 38px;
+    display: flex; justify-content: flex-end; margin: 0; z-index: 2; }}
 .st-key-gearrow .stButton {{ flex: none; }}
 .st-key-btn_gear {{ display: flex; justify-content: flex-end; }}
 .st-key-btn_gear button {{ width: 38px; min-width: 38px; height: 38px; padding: 0;
@@ -172,13 +196,16 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 [class*="st-key-geo_request_"] {{ display: none; }}
 
 /* Voice input: mic pinned inside the composer next to the send button */
-.st-key-composer {{ position: relative; }}
-.st-key-btn_mic {{ position: absolute; right: 62px; bottom: 14px; z-index: 5; }}
-.st-key-btn_mic button {{ width: 34px; min-width: 34px; height: 34px; padding: 0;
-    border: 1px solid {LINE}; background: {PANEL}; color: {MUTED}; border-radius: 50% !important; }}
-.st-key-btn_mic button:hover {{ border-color: {ACCENT}; color: {ACCENT}; background: {ACCENT_SOFT}; }}
+.st-key-composer_input {{ position: relative; }}
+/* Native send: 16px inset + 32px button; leave an 8px gap before the mic. */
+.st-key-btn_mic {{ position: absolute; right: 56px; bottom: 20px; z-index: 5; }}
+.st-key-btn_mic button {{ width: 32px; min-width: 32px; height: 32px; min-height: 32px; padding: 0;
+    border: none; background: {ACCENT}; color: #fff; border-radius: 10px !important; }}
+.st-key-btn_mic button:hover {{ background: {ACCENT}; color: #fff; filter: brightness(.92); }}
+.st-key-btn_mic button:focus-visible {{ outline: 2px solid {ACCENT}; outline-offset: 3px; }}
 .st-key-btn_mic button[disabled] {{ opacity: .5; }}
-.st-key-btn_mic button p {{ display: none; }}
+.st-key-btn_mic button p {{ position: absolute; width: 1px; height: 1px; padding: 0;
+    overflow: hidden; clip-path: inset(50%); white-space: nowrap; }}
 [class*="st-key-mic_request_"], [class*="st-key-mic_capture_"] {{ display: none; }}
 @keyframes aw-pulse {{ 0%, 100% {{ opacity: .25; }} 50% {{ opacity: 1; }} }}
 .aw-mic-live {{ color: {MUTED}; font-size: 0.74rem; margin-top: 6px; }}
@@ -186,12 +213,8 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
     background: #D92D20; margin-right: 7px; animation: aw-pulse 1.1s infinite; }}
 
 /* Sidebar (ChatGPT-style) */
-.aw-logo {{ width: 38px; height: 38px; border-radius: 12px; display: grid; place-items: center;
-            background: linear-gradient(140deg, #6C5CF6, #4338CA); color: #fff; font-weight: 700;
-            font-size: 18px; flex: none; box-shadow: 0 6px 14px rgba(81,70,229,.28); }}
-.aw-brand {{ display: flex; align-items: center; gap: 10px; padding: 0 4px 14px; }}
-.aw-brand-name {{ font-weight: 700; color: {INK}; font-size: 0.98rem; letter-spacing: -0.01em; }}
-.aw-brand-sub {{ font-size: 0.7rem; color: {SUBTLE}; margin-top: 1px; }}
+.aw-brand {{ display: flex; align-items: center; min-height: 64px; padding: 0 0 12px; }}
+.aw-brand img {{ display: block; width: 100%; max-width: 240px; height: auto; object-fit: contain; }}
 .st-key-btn_newchat {{ margin-bottom: 10px; }}
 .st-key-btn_newchat button {{ width: 100%; justify-content: flex-start; border: 1px solid {LINE};
     background: {PANEL}; border-radius: 10px; font-weight: 600; font-size: 0.88rem; color: {INK}; }}
@@ -200,7 +223,8 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 
 /* Chat header */
 .aw-head {{ display: flex; align-items: center; justify-content: space-between; gap: 12px;
-            padding: 16px 24px; border-bottom: 1px solid {LINE}; background: {PANEL}; }}
+            padding: 16px 64px 16px 24px; border-bottom: 1px solid {LINE}; background: {PANEL};
+            flex-wrap: wrap; }}
 .aw-head-title {{ font-size: 1.45rem; font-weight: 700; color: {INK}; letter-spacing: -0.02em; }}
 .aw-head-sub {{ font-size: 0.8rem; color: {SUBTLE}; margin-top: 2px; }}
 .aw-pills {{ display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }}
@@ -209,7 +233,8 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .aw-pill .msi {{ font-size: 17px; color: {MUTED}; }}
 
 /* Messages */
-.st-key-messages {{ height: clamp(300px, calc(100dvh - 260px), 700px) !important;
+.st-key-chat > [data-testid="stLayoutWrapper"]:has(> .st-key-messages) {{ min-height: 0; }}
+.st-key-messages {{ min-height: 0;
                     overflow-y: auto; padding: 8px 24px 14px; scrollbar-gutter: stable; }}
 .aw-row {{ display: flex; gap: 12px; align-items: flex-start; margin: 14px 0; }}
 .aw-row.user {{ justify-content: flex-end; }}
@@ -220,7 +245,7 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .aw-bubble {{ background: {PANEL}; border: 1px solid {LINE}; border-radius: 14px; padding: 11px 14px;
               font-size: 0.9rem; color: {INK}; line-height: 1.55; max-width: 640px; }}
 .aw-bubble.user {{ background: {ACCENT}; border-color: {ACCENT}; color: #fff; border-radius: 14px;
-                   box-shadow: 0 6px 16px rgba(81,70,229,.22); }}
+                   box-shadow: 0 6px 16px rgba(2,132,199,.22); }}
 .aw-bubble .aw-time {{ font-size: 0.72rem; color: {SUBTLE}; text-align: right; margin-top: 4px; }}
 .aw-bubble.user .aw-time {{ color: rgba(255,255,255,.72); }}
 .aw-user-meta {{ font-size: 0.74rem; color: rgba(255,255,255,.78); margin-top: 6px;
@@ -270,11 +295,11 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 /* Composer */
 .st-key-composer {{ padding: 12px 24px 2px; border-top: 1px solid {LINE}; background: {PAGE}; }}
 .st-key-composer [data-testid="stChatInput"] {{ width: 100%; border-radius: 14px;
-    border: 1px solid #D9DDF0; background: {PANEL}; box-shadow: 0 3px 14px rgba(16,24,40,.06); }}
+    border: 1px solid #CDE5F1; background: {PANEL}; box-shadow: 0 3px 14px rgba(16,24,40,.06); }}
 .st-key-composer [data-testid="stChatInput"]:focus-within {{ border-color: {ACCENT};
-    box-shadow: 0 0 0 3px rgba(81,70,229,.12); }}
+    box-shadow: 0 0 0 3px rgba(2,132,199,.12); }}
 .st-key-composer [data-testid="stChatInput"] textarea {{ font-size: 0.93rem; min-height: 44px;
-    line-height: 1.4; }}
+    line-height: 1.4; padding-right: 44px; }}
 [data-testid="stChatInputSubmitButton"] {{ background: {ACCENT} !important; color: #fff !important;
                                            border-radius: 10px !important; }}
 
@@ -308,17 +333,19 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .aw-foot {{ font-size: 0.74rem; color: {SUBTLE}; margin-top: 12px; }}
 
 @media (max-width: 900px) {{
-    .st-key-chat, .st-key-side, .st-key-settings {{ border-radius: 18px; border: 1px solid {LINE}; min-height: 0; }}
+    [data-testid="stLayoutWrapper"]:has(> .st-key-side),
+    [data-testid="stLayoutWrapper"]:has(> .st-key-settings) {{ height: auto !important; }}
+    .st-key-side, .st-key-settings {{ height: auto !important; }}
     .st-key-messages, .st-key-composer {{ padding-left: 12px; padding-right: 12px; }}
-    .aw-head {{ padding: 14px; flex-direction: column; align-items: flex-start; }}
+    .aw-head {{ padding: 14px 64px 14px 14px; flex-direction: column; align-items: flex-start; }}
     .aw-pills {{ justify-content: flex-start; }}
-    .st-key-messages {{ height: clamp(260px, calc(100dvh - 280px), 520px) !important; }}
     .st-key-messages [data-testid="stExpander"] {{ margin-left: 0; }}
 }}
 </style>
 """
 
-st.markdown(CSS, unsafe_allow_html=True)
+# Style-only HTML is kept outside the layout so it does not add an empty row.
+st.html(CSS)
 
 
 # ── State ────────────────────────────────────────────────────────────────────
@@ -426,7 +453,7 @@ def _restore_settings_state() -> None:
         return
     for key in _SETTING_KEYS:
         try:
-            ss[key]
+            _ = ss[key]  # Avoid rendering settings values through Streamlit magic.
         except KeyError:
             if key in backup:
                 ss[key] = backup[key]
@@ -875,8 +902,8 @@ def render_map(resp: RecommendResponse) -> None:
             data=[{"name": "Ваша зона (~100 м, точные координаты не сохраняются)",
                    "lat": center_lat, "lon": center_lon}],
             get_position="[lon, lat]",
-            get_fill_color=[81, 70, 229, 38],
-            get_line_color=[81, 70, 229, 200],
+            get_fill_color=[2, 132, 199, 38],
+            get_line_color=[2, 132, 199, 200],
             get_radius=110,
             stroked=True,
             line_width_min_pixels=1.5,
@@ -901,7 +928,7 @@ def render_map(resp: RecommendResponse) -> None:
             "PathLayer",
             data=[{"name": resp.route.title, "path": path}],
             get_path="path",
-            get_color=[81, 70, 229, 170],
+            get_color=[2, 132, 199, 170],
             width_min_pixels=2,
             pickable=True,
         ))
@@ -990,11 +1017,12 @@ def render_inspector(req: RecommendRequest, resp: RecommendResponse) -> None:
 # ── Layout: ChatGPT-style sidebar | chat ─────────────────────────────────────
 
 show_settings = st.session_state.show_settings
-if show_settings:
-    col_side, col_chat, col_settings = st.columns([0.20, 0.56, 0.24], gap=None)
-else:
-    col_settings = None
-    col_side, col_chat = st.columns([0.235, 0.765], gap=None)
+with st.container(key="app_layout"):
+    if show_settings:
+        col_side, col_chat, col_settings = st.columns([0.20, 0.56, 0.24], gap="small", vertical_alignment="top")
+    else:
+        col_settings = None
+        col_side, col_chat = st.columns([0.235, 0.765], gap="small", vertical_alignment="top")
 
 # Keep settings state alive across drawer open/close cycles (see _SETTING_KEYS).
 _sync_settings_backup()
@@ -1006,14 +1034,10 @@ r_lat, r_lon = round_coords(st.session_state.lat, st.session_state.lon)
 _voice_consume()
 
 with col_side:
-    with st.container(key="side"):
+    with st.container(key="side", height=800, border=False):
         _html(f"""
             <div class="aw-brand">
-                <div class="aw-logo">A</div>
-                <div>
-                    <div class="aw-brand-name">Astana Walk</div>
-                    <div class="aw-brand-sub">куда сходить рядом</div>
-                </div>
+                <img src="{LOGO_URL}" alt="AstanaWalk.ai — прогулки по Астане">
             </div>
             """)
         st.button(
@@ -1037,7 +1061,7 @@ with col_side:
                     use_container_width=True,
                 )
         if st.session_state.active_preset:
-            _html(f"""<style>.st-key-btn_{st.session_state.active_preset} button {{
+            st.html(f"""<style>.st-key-btn_{st.session_state.active_preset} button {{
                     background: {ACCENT_SOFT} !important; border-left-color: {ACCENT} !important;
                     font-weight: 600 !important; }}</style>""")
 
@@ -1057,7 +1081,7 @@ with col_side:
                     )
             current = st.session_state.active_convo
             if current is not None:
-                _html(f"""<style>.st-key-btn_convo_{current} button {{
+                st.html(f"""<style>.st-key-btn_convo_{current} button {{
                         background: {ACCENT_SOFT} !important; color: {ACCENT} !important;
                         font-weight: 600 !important; }}</style>""")
         else:
@@ -1074,7 +1098,7 @@ with col_side:
             """)
 
 with col_chat:
-    with st.container(key="chat"):
+    with st.container(key="chat", height=800, border=False):
         convo = next(
             (c for c in st.session_state.convos if c["id"] == st.session_state.active_convo), None,
         )
@@ -1086,7 +1110,7 @@ with col_chat:
         _html(f"""
             <div class="aw-head">
                 <div>
-                    <div class="aw-head-title">Astana Walk 🧭</div>
+                    <div class="aw-head-title">Astana Walk</div>
                     <div class="aw-head-sub">Куда сходить в Астане прямо сейчас</div>
                 </div>
                 <div class="aw-pills">
@@ -1099,32 +1123,31 @@ with col_chat:
 
         # Settings gear pinned to the chat header's top-right corner.
         with st.container(key="gearrow"):
-            _g1, _g2 = st.columns([0.92, 0.08], gap="small")
-            with _g2:
-                st.button(
-                    "Настройки",
-                    key="btn_gear",
-                    icon=":material/settings:",
-                    on_click=toggle_settings,
-                    help="Свернуть или раскрыть панель настроек (точка старта, радиус, время, погода)",
-                )
+            st.button(
+                "Настройки",
+                key="btn_gear",
+                icon=":material/settings:",
+                on_click=toggle_settings,
+                help="Свернуть или раскрыть панель настроек (точка старта, радиус, время, погода)",
+            )
         if st.session_state.show_settings:
-            _html(f"""<style>.st-key-btn_gear button {{
+            st.html(f"""<style>.st-key-btn_gear button {{
                     background: {ACCENT_SOFT} !important; color: {ACCENT} !important; }}</style>""")
 
-        messages = st.container(key="messages", height=520, border=False, autoscroll=True)
+        messages = st.container(key="messages", height="stretch", border=False, autoscroll=True)
         with st.container(key="composer"):
-            prompt = st.chat_input("Напишите, куда хочется сходить… например: тихое кафе с розеткой на час")
-            st.button(
-                "",  # icon-only mic pinned next to the send button
-                key="btn_mic",
-                icon=":material/mic:",
-                on_click=request_voice,
-                use_container_width=False,
-                help="Нажмите и говорите: пауза завершит фразу. Голос распознаёт браузер, "
-                     "а если он не умеет — аудио уходит в ИИ (OpenRouter STT).",
-                disabled=_js_eval is None,
-            )
+            with st.container(key="composer_input", gap=None):
+                prompt = st.chat_input("Напишите, куда хочется сходить… например: тихое кафе с розеткой на час")
+                st.button(
+                    "Микрофон",
+                    key="btn_mic",
+                    icon=":material/mic:",
+                    on_click=request_voice,
+                    use_container_width=False,
+                    help="Нажмите и говорите: пауза завершит фразу. Голос распознаёт браузер, "
+                         "а если он не умеет — аудио уходит в ИИ (OpenRouter STT).",
+                    disabled=_js_eval is None,
+                )
             _voice = _ss_get("mic_state") or ("idle", None)
             if _voice and len(_voice) == 2 and _voice[1]:
                 if _voice[0] == "listen":
@@ -1155,7 +1178,7 @@ with col_chat:
 
 if col_settings is not None:
     with col_settings:
-        with st.container(key="settings"):
+        with st.container(key="settings", height=800, border=False):
             _head, _close = st.columns([0.82, 0.18], gap="small")
             with _head:
                 _html("""
