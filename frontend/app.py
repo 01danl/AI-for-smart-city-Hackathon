@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import base64
 import json
+import math
 import sys
 from datetime import date, datetime, time
 from html import escape
@@ -22,10 +23,8 @@ import pydeck as pdk
 import streamlit as st
 
 try:  # optional runtime helpers: browser geolocation + Web Speech API speech-to-text
-    from streamlit_js_eval import get_geolocation as _js_get_geolocation
     from streamlit_js_eval import streamlit_js_eval as _js_eval
 except ImportError:  # without them the app still works: landmarks, manual coords, typing
-    _js_get_geolocation = None
     _js_eval = None
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -55,6 +54,7 @@ from backend.generation.voice import transcribe_b64_wav as _server_transcribe  #
 from backend.retrieval import BACKEND, parse_query_intent, retrieve  # noqa: E402
 from backend.retrieval.geo import round_coords  # noqa: E402
 from backend.retrieval.index import load_pois  # noqa: E402
+from frontend.geolocation import GEOLOCATION_JS, geolocation_error  # noqa: E402
 
 st.set_page_config(
     page_title="Astana Walk · прогулки по Астане",
@@ -190,8 +190,8 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
     background: {PANEL}; border-radius: 10px; font-weight: 600; font-size: 0.85rem; color: {INK}; }}
 .st-key-btn_geo button:hover {{ border-color: {ACCENT}; color: {ACCENT}; }}
 .st-key-btn_geo button[disabled] {{ opacity: .55; }}
-/* the geolocation component itself is invisible plumbing */
-[class*="st-key-geo_request_"] {{ display: none; }}
+/* Keep the component mounted without adding an empty row. */
+[class*="st-key-geo_request_"] {{ height: 0; min-height: 0; overflow: hidden; }}
 
 /* Voice input: mic pinned inside the composer next to the send button */
 .st-key-composer_input {{ position: relative; }}
@@ -523,28 +523,41 @@ def apply_landmark() -> None:
 
 
 def request_geolocation() -> None:
-    """Find-my-location callback: bump the counter so the drawer re-mounts the JS fix."""
-    st.session_state.geo_click = int(_ss_get("geo_click", 0)) + 1
+    """Use a fresh component key even after a successful or failed request."""
+    ss = st.session_state
+    ss.geo_serial = int(_ss_get("geo_serial", 0)) + 1
+    ss.geo_click = ss.geo_serial
+    ss.geo_note = None
 
 
 def _apply_geo_result(loc: dict, geo_key: str) -> str | None:
     """Store a browser location fix into the settings: round at once, keep no raw values."""
     ss = st.session_state
-    coords = (loc or {}).get("coords") or {}
+    if geo_key != f"geo_request_{_ss_get('geo_click', 0)}":
+        return _ss_get("geo_note")
+    ss.geo_click = 0
+    coords = loc.get("coords") if isinstance(loc, dict) else None
+    coords = coords if isinstance(coords, dict) else {}
     try:
-        r_lat, r_lon = round_coords(float(coords["latitude"]), float(coords["longitude"]))
+        lat, lon = float(coords["latitude"]), float(coords["longitude"])
+        if not (math.isfinite(lat) and math.isfinite(lon) and -90 <= lat <= 90 and -180 <= lon <= 180):
+            raise ValueError("Invalid browser coordinates")
+        r_lat, r_lon = round_coords(lat, lon)
     except (KeyError, TypeError, ValueError):
-        err = (loc or {}).get("error") or {}
-        msg = str(err.get("message") or err.get("code") or "доступ запрещён браузером")
-        return f"Браузер не дал координаты ({msg}) — выберите ориентир или введите их вручную."
+        err = loc.get("error") if isinstance(loc, dict) else None
+        ss.geo_note = geolocation_error(err.get("code") if isinstance(err, dict) else None)
+        return ss.geo_note
     ss.lat = r_lat
     ss.lon = r_lon
     ss.landmark = CUSTOM_POINT
-    ss.geo_click = 0            # the fix is applied: stop polling GPS on later reruns
-    ss.geo_applied_for = None   # ...and drop the guard with it
-    acc = coords.get("accuracy")
-    tail = f" · точность ±{int(float(acc))} м" if acc else ""
-    return f"Точка старта из геолокации: ~{r_lat}, {r_lon}{tail} · сырые координаты не сохраняем"
+    try:
+        acc = float(coords.get("accuracy"))
+        tail = f" · точность браузера ±{math.ceil(acc)} м" if math.isfinite(acc) and acc > 0 else ""
+    except (TypeError, ValueError):
+        tail = ""
+    ss.geo_note = f"Точка старта из геолокации: ~{r_lat}, {r_lon}{tail} · точка округлена до ~100 м"
+    _sync_settings_backup()
+    return ss.geo_note
 
 
 # ── Voice input (browser Speech Recognition through streamlit-js-eval) ───────
@@ -1211,19 +1224,20 @@ if col_settings is not None:
                 on_click=request_geolocation,
                 use_container_width=True,
                 help="Браузер запросит разрешение; координаты сразу округляем до ~100 м, сырые не сохраняем.",
-                disabled=_js_get_geolocation is None,
+                disabled=_js_eval is None or bool(_ss_get("geo_click", 0)),
             )
             _geo_click = int(_ss_get("geo_click", 0))
             _geo_key = f"geo_request_{_geo_click}"
-            _geo_note = None
-            if _js_get_geolocation is None:
+            _geo_note = _ss_get("geo_note")
+            if _js_eval is None:
                 _geo_note = "Геолокация недоступна (нет компонента) — выберите ориентир или введите координаты."
-            elif _geo_click and _ss_get("geo_applied_for") != _geo_key:
-                _fix = _js_get_geolocation(component_key=_geo_key)
+            elif _geo_click:
+                _fix = _js_eval(js_expressions=GEOLOCATION_JS, key=_geo_key)
                 if _fix is None:
-                    _geo_note = "Ждём разрешение браузера и координаты…"
+                    _geo_note = "Разрешите геолокацию рядом с адресной строкой. Ожидание — до 15 секунд."
                 else:
                     _geo_note = _apply_geo_result(_fix, _geo_key)
+                    st.rerun()  # Remove the completed component and re-enable retry.
             if _geo_note:
                 st.caption(_geo_note)
             st.selectbox(
