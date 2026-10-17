@@ -125,14 +125,16 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
         font-style: normal; display: inline-block; -webkit-font-smoothing: antialiased; }}
 
 [data-testid="stSidebar"], [data-testid="stSidebarCollapsedControl"] {{ display: none; }}
-.block-container {{ padding: 1.1rem 1.2rem 1rem 1.2rem; max-width: 1480px; }}
+.block-container {{ padding: 1rem 1.2rem 1rem; max-width: 1480px; }}
 
 /* Panels */
 .st-key-rail, .st-key-chat, .st-key-side {{ background: {PANEL}; border: 1px solid {LINE}; }}
-.st-key-rail {{ border-radius: 18px 0 0 18px; border-right: none; min-height: 860px;
+.st-key-rail {{ border-radius: 18px 0 0 18px; border-right: none; min-height: calc(100dvh - 32px);
                 padding: 18px 0 !important; align-items: center; }}
-.st-key-chat {{ border-radius: 0; background: {PAGE}; padding: 0 0 14px 0 !important; min-height: 860px; }}
-.st-key-side {{ border-radius: 0 18px 18px 0; border-left: none; min-height: 860px; padding: 18px 0 !important; }}
+.st-key-chat {{ border-radius: 0; background: {PAGE}; padding: 0 0 12px 0 !important;
+                min-height: calc(100dvh - 32px); }}
+.st-key-side {{ border-radius: 0 18px 18px 0; border-left: none;
+                min-height: calc(100dvh - 32px); padding: 18px 0 !important; }}
 
 /* Rail */
 .aw-rail {{ display: flex; flex-direction: column; align-items: center; gap: 14px; height: 100%; }}
@@ -142,11 +144,11 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .aw-rail-item {{ width: 40px; height: 40px; border-radius: 12px; display: grid; place-items: center;
                  color: {MUTED}; }}
 .aw-rail-item.active {{ background: {ACCENT_SOFT}; color: {ACCENT}; }}
-.aw-rail-spacer {{ flex: 1; min-height: 340px; }}
+.aw-rail-spacer {{ flex: 1; min-height: 220px; }}
 
 /* Chat header */
 .aw-head {{ display: flex; align-items: center; justify-content: space-between; gap: 12px;
-            padding: 16px 26px; border-bottom: 1px solid {LINE}; background: {PANEL}; }}
+            padding: 16px 24px; border-bottom: 1px solid {LINE}; background: {PANEL}; }}
 .aw-head-title {{ font-size: 1.45rem; font-weight: 700; color: {INK}; letter-spacing: -0.02em; }}
 .aw-head-sub {{ font-size: 0.8rem; color: {SUBTLE}; margin-top: 2px; }}
 .aw-pills {{ display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }}
@@ -155,7 +157,8 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .aw-pill .msi {{ font-size: 17px; color: {MUTED}; }}
 
 /* Messages */
-.st-key-messages {{ padding: 6px 26px 0 26px; }}
+.st-key-messages {{ height: clamp(300px, calc(100dvh - 260px), 700px) !important;
+                    overflow-y: auto; padding: 8px 24px 14px; scrollbar-gutter: stable; }}
 .aw-row {{ display: flex; gap: 12px; align-items: flex-start; margin: 14px 0; }}
 .aw-row.user {{ justify-content: flex-end; }}
 .aw-bot-badge {{ flex: none; width: 34px; height: 34px; border-radius: 50%; background: {ACCENT_SOFT};
@@ -213,10 +216,13 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .aw-dot {{ display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }}
 
 /* Composer */
-.st-key-composer {{ padding: 0 26px; }}
-[data-testid="stChatInput"] {{ border-radius: 16px; border: 1px solid {LINE}; background: {PANEL};
-                               box-shadow: 0 8px 24px rgba(16,24,40,.06); }}
-[data-testid="stChatInput"] textarea {{ font-size: 0.95rem; min-height: 64px; }}
+.st-key-composer {{ padding: 12px 24px 2px; border-top: 1px solid {LINE}; background: {PAGE}; }}
+.st-key-composer [data-testid="stChatInput"] {{ width: 100%; border-radius: 14px;
+    border: 1px solid #D9DDF0; background: {PANEL}; box-shadow: 0 3px 14px rgba(16,24,40,.06); }}
+.st-key-composer [data-testid="stChatInput"]:focus-within {{ border-color: {ACCENT};
+    box-shadow: 0 0 0 3px rgba(81,70,229,.12); }}
+.st-key-composer [data-testid="stChatInput"] textarea {{ font-size: 0.93rem; min-height: 44px;
+    line-height: 1.4; }}
 [data-testid="stChatInputSubmitButton"] {{ background: {ACCENT} !important; color: #fff !important;
                                            border-radius: 10px !important; }}
 
@@ -257,7 +263,7 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
     .st-key-messages, .st-key-composer {{ padding-left: 12px; padding-right: 12px; }}
     .aw-head {{ padding: 14px; flex-direction: column; align-items: flex-start; }}
     .aw-pills {{ justify-content: flex-start; }}
-    .st-key-messages {{ height: auto !important; max-height: 62vh; }}
+    .st-key-messages {{ height: clamp(260px, calc(100dvh - 280px), 520px) !important; }}
     .st-key-messages [data-testid="stExpander"] {{ margin-left: 0; }}
 }}
 </style>
@@ -648,7 +654,7 @@ with col_chat:
             </div>
             """)
 
-        messages = st.container(key="messages", height=700, border=False, autoscroll=True)
+        messages = st.container(key="messages", height=520, border=False, autoscroll=True)
         with st.container(key="composer"):
             prompt = st.chat_input("Напишите, куда хочется сходить… например: тихое кафе с розеткой на час")
         if prompt and prompt.strip():
