@@ -2,7 +2,8 @@
 
 ChatGPT-style layout: left sidebar with "Новый чат", scenario shortcuts and a
 revisitable conversation history; the chat in the middle; the right settings
-drawer is open by default and the gear in the chat header toggles it.
+panel shows the map of the latest answer; the gear in the chat header swaps it
+for the settings drawer.
 
 Launch with:
     streamlit run frontend/app.py
@@ -14,12 +15,14 @@ import base64
 import json
 import math
 import sys
+import threading
 from datetime import date, datetime, time
 from html import escape
 from pathlib import Path
 
 import pandas as pd
 import pydeck as pdk
+from pydeck.types import String as _DeckString
 import streamlit as st
 
 try:  # optional runtime helpers: browser geolocation + Web Speech API speech-to-text
@@ -52,6 +55,7 @@ from backend.generation.prompts import build_rag_messages  # noqa: E402
 from backend.generation.voice import has_server_asr as _server_asr_ready  # noqa: E402
 from backend.generation.voice import transcribe_b64_wav as _server_transcribe  # noqa: E402
 from backend.retrieval import BACKEND, parse_query_intent, retrieve  # noqa: E402
+from backend.retrieval import warmup as _retrieval_warmup  # noqa: E402
 from backend.retrieval.geo import round_coords  # noqa: E402
 from backend.retrieval.index import load_pois  # noqa: E402
 from frontend.geolocation import GEOLOCATION_JS, geolocation_error  # noqa: E402
@@ -62,6 +66,21 @@ st.set_page_config(
     layout="wide",
     initial_sidebar_state="collapsed",
 )
+
+
+
+@st.cache_resource(show_spinner=False)
+def _warmup_thread() -> threading.Thread:
+    """Load the embedding model and index once per server, in the background.
+
+    Without it the first question waits ~20 s for the model; the page itself must not block.
+    """
+    thread = threading.Thread(target=_retrieval_warmup, name="aw-warmup", daemon=True)
+    thread.start()
+    return thread
+
+
+_warmup_thread()
 
 # ── Design tokens ────────────────────────────────────────────────────────────
 
@@ -152,12 +171,13 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 /* Panels */
 [data-testid="stLayoutWrapper"]:has(> .st-key-side),
 [data-testid="stLayoutWrapper"]:has(> .st-key-settings),
+[data-testid="stLayoutWrapper"]:has(> .st-key-mappanel),
 [data-testid="stLayoutWrapper"]:has(> .st-key-chat) {{
     height: calc(100dvh - 32px) !important; min-height: 0;
 }}
-.st-key-side, .st-key-settings, .st-key-chat {{ background: {PANEL}; border: 1px solid {LINE};
+.st-key-side, .st-key-settings, .st-key-mappanel, .st-key-chat {{ background: {PANEL}; border: 1px solid {LINE};
     border-radius: 18px; height: 100% !important; min-height: 0; box-sizing: border-box; }}
-.st-key-side, .st-key-settings {{ padding: 16px !important;
+.st-key-side, .st-key-settings, .st-key-mappanel {{ padding: 16px !important;
                                   overflow-y: auto; }}
 .st-key-chat {{ position: relative; background: {PAGE}; padding: 0 0 12px !important; overflow: hidden; }}
 .st-key-app_layout > [data-testid="stLayoutWrapper"] > [data-testid="stHorizontalBlock"] {{
@@ -284,6 +304,35 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .aw-card details div {{ margin-top: 5px; line-height: 1.5; }}
 .aw-card a {{ color: {ACCENT}; }}
 .aw-disclaimer {{ font-size: 0.74rem; color: {SUBTLE}; margin-top: 8px; line-height: 1.45; }}
+.aw-disclaimer summary {{ cursor: pointer; color: {MUTED}; font-weight: 500; list-style: none; }}
+.aw-disclaimer summary::before {{ content: "ⓘ "; }}
+.aw-links {{ display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }}
+.aw-links a {{ font-size: 0.76rem; font-weight: 600; text-decoration: none; padding: 4px 10px;
+               border: 1px solid #CDE5F1; border-radius: 999px; color: {ACCENT}; background: {ACCENT_SOFT}; }}
+.aw-links a:hover {{ border-color: {ACCENT}; }}
+.aw-pill-start b {{ color: {ACCENT}; font-weight: 700; }}
+
+/* Loading skeleton */
+@keyframes aw-shimmer {{ 0% {{ background-position: -320px 0; }} 100% {{ background-position: 320px 0; }} }}
+.aw-loading {{ color: {MUTED}; }}
+.aw-skel {{ background: {PANEL}; border: 1px solid {LINE}; border-radius: 14px; padding: 14px 15px; margin-top: 10px; }}
+.aw-skel i {{ display: block; height: 10px; border-radius: 6px; margin: 7px 0;
+              background: linear-gradient(90deg, #EEF1F5 0%, #F7F9FB 50%, #EEF1F5 100%);
+              background-size: 640px 100%; animation: aw-shimmer 1.2s linear infinite; }}
+
+/* Right map panel */
+.aw-map-empty {{ display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;
+                 color: {SUBTLE}; font-size: 0.84rem; padding: 48px 18px; border: 1px dashed {LINE};
+                 border-radius: 14px; margin-top: 10px; }}
+.aw-map-empty .msi {{ font-size: 34px; color: #CDE5F1; }}
+.aw-tl {{ margin-top: 12px; }}
+.aw-tl-head {{ font-weight: 700; color: {INK}; font-size: 0.86rem; margin-bottom: 6px; }}
+.aw-tl-row {{ display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid {LINE}; }}
+.aw-tl-num {{ flex: none; width: 22px; height: 22px; border-radius: 50%; background: {ACCENT}; color: #fff;
+              display: grid; place-items: center; font-size: 0.72rem; font-weight: 700; margin-top: 1px; }}
+.aw-tl-num.extra {{ background: #fff; border: 2px solid {ACCENT}; width: 18px; height: 18px; }}
+.aw-tl-name {{ font-weight: 600; color: {INK}; font-size: 0.86rem; }}
+.aw-tl-meta {{ font-size: 0.75rem; color: {MUTED}; line-height: 1.4; }}
 
 /* Expanders inside chat (map, route, inspector) */
 .st-key-messages [data-testid="stExpander"] {{ max-width: 680px; margin-left: 46px; background: {PANEL};
@@ -310,9 +359,6 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
                                            border-radius: 10px !important; }}
 
 /* Sidebar */
-.aw-privacy-strip {{ padding: 2px 6px 12px 6px; border-top: 1px solid {LINE}; margin-top: 14px;
-                     font-size: 0.75rem; color: {MUTED}; line-height: 1.45; }}
-.aw-privacy-strip .mono {{ color: {SUBTLE}; }}
 .aw-side-title {{ font-weight: 700; color: {INK}; font-size: 0.98rem; margin: 14px 0 6px 0; }}
 .aw-side-sep {{ border-top: 1px solid {LINE}; margin: 14px 0 0; }}
 
@@ -340,8 +386,9 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 
 @media (max-width: 900px) {{
     [data-testid="stLayoutWrapper"]:has(> .st-key-side),
-    [data-testid="stLayoutWrapper"]:has(> .st-key-settings) {{ height: auto !important; }}
-    .st-key-side, .st-key-settings {{ height: auto !important; }}
+    [data-testid="stLayoutWrapper"]:has(> .st-key-settings),
+    [data-testid="stLayoutWrapper"]:has(> .st-key-mappanel) {{ height: auto !important; }}
+    .st-key-side, .st-key-settings, .st-key-mappanel {{ height: auto !important; }}
     .st-key-messages, .st-key-composer {{ padding-left: 12px; padding-right: 12px; }}
     .aw-head {{ padding: 14px 64px 14px 14px; flex-direction: column; align-items: flex-start; }}
     .aw-pills {{ justify-content: flex-start; }}
@@ -501,7 +548,7 @@ def _ask(query: str, preset_id: str | None = None, via: str | None = None) -> No
     convo["entries"].append({
         "query": query,
         "req_json": _build_request(query).model_dump_json(),
-        "start": ss.landmark if ss.landmark != CUSTOM_POINT else "свои координаты",
+        "start": start_label(),
         "via": via,
     })
     convo["entries"] = convo["entries"][-MAX_HISTORY:]
@@ -513,6 +560,8 @@ def _ask(query: str, preset_id: str | None = None, via: str | None = None) -> No
 def run_preset(preset: dict) -> None:
     """Button callback: load a jury scenario's context and ask its question."""
     _load_settings(preset)
+    st.session_state.start_source = "landmark" if st.session_state.landmark in LANDMARK_POINTS else "custom"
+    st.session_state.geo_note = None
     _ask(preset["query"], preset["id"])
 
 
@@ -520,6 +569,26 @@ def apply_landmark() -> None:
     name = st.session_state.landmark
     if name in LANDMARK_POINTS:
         st.session_state.lat, st.session_state.lon, _ = LANDMARK_POINTS[name]
+        st.session_state.start_source = "landmark"
+        st.session_state.geo_note = None  # one source of truth: the landmark replaces the fix
+
+
+def mark_custom_point() -> None:
+    """Manual coordinates replace both the landmark and an earlier geolocation fix."""
+    st.session_state.landmark = CUSTOM_POINT
+    st.session_state.start_source = "custom"
+    st.session_state.geo_note = None
+
+
+def start_label() -> str:
+    """Human name of the point the next question will search around."""
+    ss = st.session_state
+    if ss.landmark in LANDMARK_POINTS:
+        return ss.landmark
+    if _ss_get("start_source") == "geo":
+        return "ваша геолокация"
+    r_lat, r_lon = round_coords(ss.lat, ss.lon)
+    return f"точка {r_lat}, {r_lon}"
 
 
 def request_geolocation() -> None:
@@ -550,12 +619,13 @@ def _apply_geo_result(loc: dict, geo_key: str) -> str | None:
     ss.lat = r_lat
     ss.lon = r_lon
     ss.landmark = CUSTOM_POINT
+    ss.start_source = "geo"
     try:
         acc = float(coords.get("accuracy"))
         tail = f" · точность браузера ±{math.ceil(acc)} м" if math.isfinite(acc) and acc > 0 else ""
     except (TypeError, ValueError):
         tail = ""
-    ss.geo_note = f"Точка старта из геолокации: ~{r_lat}, {r_lon}{tail} · точка округлена до ~100 м"
+    ss.geo_note = f"Ищу рядом с вашей геолокацией: ~{r_lat}, {r_lon}{tail} · округлено до ~100 м"
     _sync_settings_backup()
     return ss.geo_note
 
@@ -771,7 +841,8 @@ if "convos" not in st.session_state:
     st.session_state.active_convo = None  # id открытого чата; None = пустой, как в ChatGPT
     st.session_state.next_convo_id = 1
     st.session_state.active_preset = None
-    st.session_state.show_settings = True
+    st.session_state.show_settings = False  # right panel shows the map; gear opens settings
+    st.session_state.start_source = "landmark"  # landmark | geo | custom
     st.session_state.lang = "ru"
     st.session_state.include_route = True
     st.session_state.auto_anchor = True
@@ -781,10 +852,19 @@ if "convos" not in st.session_state:
 @st.cache_data(show_spinner=False, max_entries=64)
 def run_recommendations(req_json: str) -> RecommendResponse:
     """Same request -> same answer: no repeated LLM calls on reruns or repeated scenarios."""
+    _warmup_thread().join()  # reuse the background load instead of loading the model twice
     return generate_recommendations(RecommendRequest.model_validate_json(req_json))
 
 
 # ── Rendering helpers ────────────────────────────────────────────────────────
+
+SKELETON_HTML = """
+<div class="aw-row"><div class="aw-bot-badge">AW</div><div class="aw-answer">
+<div class="aw-bubble aw-loading">Подбираю места рядом и пишу объяснения…</div>
+<div class="aw-skel"><i style="width:45%"></i><i style="width:80%"></i><i style="width:65%"></i></div>
+<div class="aw-skel"><i style="width:40%"></i><i style="width:75%"></i><i style="width:55%"></i></div>
+</div></div>
+"""
 
 
 def _html(markup: str, target=st) -> None:
@@ -822,7 +902,7 @@ def render_user(entry: dict, req: RecommendRequest) -> None:
 
 
 def _context_chips(u) -> str:
-    chips = [f"локация <b>~100 м</b> <span class='mono'>{u.rounded_coords[0]}, {u.rounded_coords[1]}</span>"]
+    chips = []
     if u.anchor_resolved:
         chips.append(f"ориентир <b>{escape(u.anchor_resolved.split('(')[0].strip())}</b>")
     if u.tags:
@@ -868,6 +948,11 @@ def _card_html(idx: int, rec) -> str:
             <p><span class="aw-k">Что делать: </span>{escape(rec.what_to_do)}</p>
             <div class="aw-note">{escape(rec.confidence_note)}</div>
             {official}
+            <div class="aw-links">
+                <a href="https://www.google.com/maps/dir/?api=1&destination={rec.lat:.6f},{rec.lon:.6f}&travelmode=walking"
+                   target="_blank" rel="noopener">Маршрут пешком · Google Maps</a>
+                <a href="https://2gis.kz/astana/geo/{rec.lon:.6f},{rec.lat:.6f}" target="_blank" rel="noopener">Открыть в 2GIS</a>
+            </div>
             <details>
                 <summary>Факты из базы и что добавил ИИ</summary>
                 <div><b>Факты [poi_data]:</b><br/>{facts}</div>
@@ -884,7 +969,10 @@ def render_answer(req: RecommendRequest, resp: RecommendResponse, latest: bool) 
         word = "место" if n == 1 else "места"
         intro = f"Нашёл {n} {word} рядом. Вот что подойдёт:"
         cards = "".join(_card_html(i, r) for i, r in enumerate(resp.recommendations, start=1))
-        footer = f'<div class="aw-disclaimer">{escape(resp.disclaimer)}</div>' if latest else ""
+        footer = (
+            '<details class="aw-disclaimer"><summary>Об источниках и точности данных</summary>'
+            f"{escape(resp.disclaimer)}</details>" if latest else ""
+        )
     else:
         intro = "<b>Рядом ничего не нашлось.</b> " + escape(resp.disclaimer)
         cards, footer = "", ""
@@ -900,25 +988,47 @@ def render_answer(req: RecommendRequest, resp: RecommendResponse, latest: bool) 
         </div>
         """)
     if latest and resp.recommendations:
-        with st.expander("Карта и маршрут", icon=":material/map:", expanded=True):
-            render_map(resp)
-            render_route(resp)
+        if st.session_state.show_settings:  # otherwise the map lives in the right panel
+            with st.expander("Карта и маршрут", icon=":material/map:", expanded=True):
+                render_map(resp)
+                render_route(resp)
         with st.expander("Как это работает: поиск, кандидаты и промпт", icon=":material/manage_search:"):
             render_inspector(req, resp)
 
 
-def render_map(resp: RecommendResponse) -> None:
+def _fit_view(points: list[list[float]], px: int) -> pdk.ViewState:
+    """Center and zoom so every point fits into a map about `px` pixels across."""
+    lons = [p[0] for p in points]
+    lats = [p[1] for p in points]
+    lat = (max(lats) + min(lats)) / 2
+    lon = (max(lons) + min(lons)) / 2
+    coslat = math.cos(math.radians(lat))
+    extent_m = max((max(lats) - min(lats)) * 111_320, (max(lons) - min(lons)) * 111_320 * coslat, 400)
+    # deck.gl / MapLibre use 512 px tiles: ~78 271 m per pixel at zoom 0 on the equator.
+    # 1.6 leaves room for the markers at the edges.
+    zoom = math.log2(78_271 * coslat * px / (extent_m * 1.6))
+    return pdk.ViewState(latitude=lat, longitude=lon, zoom=max(11.0, min(15.0, zoom)), pitch=0)
+
+
+def render_map(resp: RecommendResponse, height: int = 340) -> None:
     center_lat, center_lon = resp.used_data.rounded_coords
-    poi_points = [
-        {"name": f"{i}. {r.name} · {r.distance_m} м", "lat": r.lat, "lon": r.lon,
+    rec_ids = {r.poi_id for r in resp.recommendations}
+    rec_points = [
+        {"name": f"{i}. {r.name} · {r.distance_m} м", "label": str(i), "lat": r.lat, "lon": r.lon,
          "color": STATUS_RGB.get(r.open_status, STATUS_RGB["unknown"])}
         for i, r in enumerate(resp.recommendations, start=1)
+    ]
+    stops = resp.route.stops if resp.route and len(resp.route.stops) >= 2 else []
+    # Route stops that are not among the cards still need a marker, or the line ends in nowhere.
+    extra_points = [
+        {"name": f"Маршрут, шаг {s.step}: {s.name}", "lat": s.lat, "lon": s.lon}
+        for s in stops if s.poi_id not in rec_ids
     ]
     layers = [
         # ~100 m privacy zone around the rounded user location
         pdk.Layer(
             "ScatterplotLayer",
-            data=[{"name": "Ваша зона (~100 м, точные координаты не сохраняются)",
+            data=[{"name": "Точка старта (~100 м, точные координаты не сохраняются)",
                    "lat": center_lat, "lon": center_lon}],
             get_position="[lon, lat]",
             get_fill_color=[2, 132, 199, 38],
@@ -928,46 +1038,105 @@ def render_map(resp: RecommendResponse) -> None:
             line_width_min_pixels=1.5,
             pickable=True,
         ),
-        pdk.Layer(
-            "ScatterplotLayer",
-            data=poi_points,
-            get_position="[lon, lat]",
-            get_fill_color="color",
-            get_line_color=[255, 255, 255, 255],
-            get_radius=40,
-            radius_min_pixels=6,
-            stroked=True,
-            line_width_min_pixels=2,
-            pickable=True,
-        ),
     ]
-    if resp.route and len(resp.route.stops) >= 2:
-        path = [[center_lon, center_lat]] + [[s.lon, s.lat] for s in resp.route.stops]
-        layers.insert(1, pdk.Layer(
+    if stops:
+        path = [[center_lon, center_lat]] + [[s.lon, s.lat] for s in stops]
+        layers.append(pdk.Layer(
             "PathLayer",
             data=[{"name": resp.route.title, "path": path}],
             get_path="path",
             get_color=[2, 132, 199, 170],
-            width_min_pixels=2,
+            width_min_pixels=3,
             pickable=True,
         ))
+    layers += [
+        pdk.Layer(
+            "ScatterplotLayer",
+            data=extra_points,
+            get_position="[lon, lat]",
+            get_fill_color=[255, 255, 255, 255],
+            get_line_color=[2, 132, 199, 230],
+            get_radius=6,
+            radius_units=_DeckString("pixels"),
+            stroked=True,
+            line_width_min_pixels=2,
+            pickable=True,
+        ),
+        pdk.Layer(
+            "ScatterplotLayer",
+            data=rec_points,
+            get_position="[lon, lat]",
+            get_fill_color="color",
+            get_line_color=[255, 255, 255, 255],
+            get_radius=11,
+            radius_units=_DeckString("pixels"),
+            stroked=True,
+            line_width_min_pixels=2,
+            pickable=True,
+        ),
+        # Numbers on the markers match the "#1, #2, #3" badges on the cards.
+        pdk.Layer(
+            "TextLayer",
+            data=rec_points,
+            get_position="[lon, lat]",
+            get_text="label",
+            get_size=13,
+            get_color=[255, 255, 255, 255],
+            get_text_anchor=_DeckString("middle"),
+            get_alignment_baseline=_DeckString("center"),
+            font_weight=700,
+        ),
+    ]
+    points = [[center_lon, center_lat]] + [[p["lon"], p["lat"]] for p in rec_points + extra_points]
     st.pydeck_chart(
         pdk.Deck(
             map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-            initial_view_state=pdk.ViewState(latitude=center_lat, longitude=center_lon, zoom=13.4, pitch=0),
+            initial_view_state=_fit_view(points, px=300 if height >= 400 else 520),
             layers=layers,
             tooltip={"text": "{name}"},
         ),
-        height=340,
+        height=height,
     )
     legend = "".join(
         f'<span><span class="aw-dot" style="background:rgb({c[0]},{c[1]},{c[2]})"></span>{STATUS_STYLE[s][0]}</span>'
         for s, c in STATUS_RGB.items()
     )
     st.markdown(
-        f'<div class="aw-legend">{legend}<span>Круг — ваша зона ~100 м · линия — маршрут</span></div>',
+        f'<div class="aw-legend">{legend}<span>Номер — место из ответа · круг — точка старта · '
+        "линия — маршрут</span></div>",
         unsafe_allow_html=True,
     )
+
+
+def render_route_timeline(resp: RecommendResponse) -> None:
+    """Compact route for the right panel: one row per stop with timing."""
+    rt = resp.route
+    if not rt:
+        st.caption("Для маршрута нужно минимум 2 подходящих места в радиусе.")
+        return
+    rec_num = {r.poi_id: i for i, r in enumerate(resp.recommendations, start=1)}
+    rows = []
+    for stop in rt.stops:
+        num = rec_num.get(stop.poi_id)
+        badge = f'<span class="aw-tl-num">{num}</span>' if num else '<span class="aw-tl-num extra"></span>'
+        s_label, s_fg, _ = STATUS_STYLE.get(stop.open_status, STATUS_STYLE["unknown"])
+        rows.append(f"""
+            <div class="aw-tl-row">
+                {badge}
+                <div>
+                    <div class="aw-tl-name">{escape(stop.name)}</div>
+                    <div class="aw-tl-meta">+{stop.arrival_offset_min}…+{stop.departure_offset_min} мин от старта ·
+                        идти {stop.from_prev_m} м (~{stop.from_prev_walk_min} мин) · на месте ~{stop.visit_min} мин</div>
+                    <div class="aw-tl-meta" style="color:{s_fg};">{s_label}</div>
+                </div>
+            </div>""")
+    _html(f"""
+        <div class="aw-tl">
+            <div class="aw-tl-head">{escape(rt.title)} · всего ~{rt.total_duration_min} мин,
+                пешком {rt.total_distance_m} м</div>
+            {"".join(rows)}
+        </div>
+        """)
 
 
 def render_route(resp: RecommendResponse) -> None:
@@ -1037,11 +1206,9 @@ def render_inspector(req: RecommendRequest, resp: RecommendResponse) -> None:
 
 show_settings = st.session_state.show_settings
 with st.container(key="app_layout"):
-    if show_settings:
-        col_side, col_chat, col_settings = st.columns([0.20, 0.56, 0.24], gap="small", vertical_alignment="top")
-    else:
-        col_settings = None
-        col_side, col_chat = st.columns([0.235, 0.765], gap="small", vertical_alignment="top")
+    # Right column: settings drawer when the gear is on, otherwise the map of the latest answer.
+    col_side, col_chat, col_right = st.columns([0.20, 0.52, 0.28], gap="small", vertical_alignment="top")
+col_settings = col_right if show_settings else None
 
 # Keep settings state alive across drawer open/close cycles (see _SETTING_KEYS).
 _sync_settings_backup()
@@ -1109,12 +1276,6 @@ with col_side:
                 unsafe_allow_html=True,
             )
 
-        _html(f"""
-            <div class="aw-privacy-strip">
-                Точка поиска: <span class="mono">{r_lat}, {r_lon}</span> — округлена до ~100 м.
-                Точные координаты не хранятся и не отправляются в модель.
-            </div>
-            """)
 
 with col_chat:
     with st.container(key="chat", height=800, border=False):
@@ -1125,7 +1286,10 @@ with col_chat:
         last_mode = None
         if entries:
             last_mode = run_recommendations(entries[-1]["req_json"]).used_data.generation_mode
-        mode_label = "нейросеть" if last_mode and "llm" in last_mode.lower() else "шаблоны"
+        if last_mode:
+            mode_label = "нейросеть" if "llm" in last_mode.lower() else "шаблоны"
+        else:  # no answer yet: show what the next answer will use
+            mode_label = "нейросеть" if _server_asr_ready() else "шаблоны"
         _html(f"""
             <div class="aw-head">
                 <div>
@@ -1134,7 +1298,10 @@ with col_chat:
                 </div>
                 <div class="aw-pills">
                     <span class="aw-pill"><span class="msi">location_on</span>{len(load_pois())} мест</span>
-                    <span class="aw-pill"><span class="msi">shield_lock</span>точка ~100 м</span>
+                    <span class="aw-pill aw-pill-start"
+                          title="Точка округляется до ~100 м; точные координаты не хранятся и не уходят в модель">
+                        <span class="msi">near_me</span>Ищу рядом с:&nbsp;<b>{escape(start_label())}</b>
+                    </span>
                     <span class="aw-pill"><span class="msi">auto_awesome</span>ответ: {mode_label}</span>
                 </div>
             </div>
@@ -1191,11 +1358,41 @@ with col_chat:
                 req = RecommendRequest.model_validate_json(entry["req_json"])
                 render_user(entry, req)
                 latest = i == len(entries) - 1
-                with st.spinner("Подбираю места…"):
+                if latest:
+                    loading = st.empty()
+                    loading.html(SKELETON_HTML)
+                    resp = run_recommendations(entry["req_json"])
+                    loading.empty()
+                else:
                     resp = run_recommendations(entry["req_json"])
                 render_answer(req, resp, latest=latest)
 
-if col_settings is not None:
+if col_settings is None:
+    with col_right:
+        with st.container(key="mappanel", height=800, border=False):
+            _html("""
+                <div class="aw-settings-head">
+                    <div>
+                        <div class="aw-settings-title">Карта и маршрут</div>
+                        <div class="aw-settings-sub">По последнему ответу · шестерёнка открывает настройки</div>
+                    </div>
+                </div>
+                """)
+            _convo = next(
+                (c for c in st.session_state.convos if c["id"] == st.session_state.active_convo), None,
+            )
+            _last = run_recommendations(_convo["entries"][-1]["req_json"]) if _convo and _convo["entries"] else None
+            if _last is not None and _last.recommendations:
+                render_map(_last, height=420)
+                render_route_timeline(_last)
+            else:
+                _html("""
+                    <div class="aw-map-empty">
+                        <span class="msi">map</span>
+                        Здесь появится карта: места из ответа с номерами, точка старта и пеший маршрут.
+                    </div>
+                    """)
+else:
     with col_settings:
         with st.container(key="settings", height=800, border=False):
             _head, _close = st.columns([0.82, 0.18], gap="small")
@@ -1251,8 +1448,8 @@ if col_settings is not None:
                 st.caption(LANDMARK_POINTS[st.session_state.landmark][2])
             with st.expander("Точные координаты", expanded=st.session_state.landmark == CUSTOM_POINT):
                 c1, c2 = st.columns(2)
-                c1.number_input("Широта", key="lat", format="%.4f", step=0.002)
-                c2.number_input("Долгота", key="lon", format="%.4f", step=0.002)
+                c1.number_input("Широта", key="lat", format="%.4f", step=0.002, on_change=mark_custom_point)
+                c2.number_input("Долгота", key="lon", format="%.4f", step=0.002, on_change=mark_custom_point)
                 st.caption(f"В логи и API попадает только округление до ~100 м: `{r_lat}, {r_lon}`")
             st.slider("Радиус пешком, м", min_value=300, max_value=6000, step=100, key="max_distance_m")
             d1, d2 = st.columns([1.15, 1])

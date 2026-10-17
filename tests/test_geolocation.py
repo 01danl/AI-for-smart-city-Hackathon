@@ -32,6 +32,7 @@ def test_failed_geolocation_finishes_and_allows_retry(monkeypatch, code, message
 
     monkeypatch.setattr(streamlit_js_eval, "streamlit_js_eval", fake_js)
     app = AppTest.from_file(str(APP_PATH), default_timeout=30).run()
+    app.button(key="btn_gear").click().run()  # the settings drawer is closed by default
     previous = (app.session_state.lat, app.session_state.lon)
     app.button(key="btn_geo").click().run()
     assert not app.exception
@@ -53,6 +54,7 @@ def test_failed_geolocation_finishes_and_allows_retry(monkeypatch, code, message
 def test_pending_geolocation_does_not_start_duplicate_requests(monkeypatch):
     monkeypatch.setattr(streamlit_js_eval, "streamlit_js_eval", lambda **kwargs: None)
     app = AppTest.from_file(str(APP_PATH), default_timeout=30).run()
+    app.button(key="btn_gear").click().run()  # the settings drawer is closed by default
     app.button(key="btn_geo").click().run()
     assert not app.exception
     assert app.button(key="btn_geo").disabled
