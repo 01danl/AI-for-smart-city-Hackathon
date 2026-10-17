@@ -231,6 +231,9 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
                      font-size: 0.75rem; color: {MUTED}; line-height: 1.45; }}
 .aw-privacy-strip .mono {{ color: {SUBTLE}; }}
 .st-key-side .st-key-side_view {{ padding: 0 22px 12px 22px; }}
+.st-key-side .st-key-view_main, .st-key-side .st-key-view_settings {{
+    padding: 0 22px; min-width: 0; box-sizing: border-box;
+}}
 .st-key-side .st-key-side_view button {{ font-weight: 600; font-size: 0.86rem; border-radius: 9px; }}
 .st-key-rail .st-key-btn_rail_settings {{ display: flex; justify-content: center; }}
 .st-key-rail .st-key-btn_rail_settings button {{ width: 40px; min-width: 40px; height: 40px; padding: 0;
@@ -238,20 +241,20 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .st-key-rail .st-key-btn_rail_settings button:hover {{ background: {ACCENT_SOFT}; color: {ACCENT}; }}
 .st-key-rail .st-key-btn_rail_settings button p {{ display: none; }}
 .aw-side-title {{ font-weight: 700; color: {INK}; font-size: 0.98rem; margin: 14px 0 6px 0; }}
-.aw-side-sep {{ border-top: 1px solid {LINE}; margin: 14px -22px 0 -22px; }}
+.aw-side-sep {{ border-top: 1px solid {LINE}; margin: 14px 0 0; }}
 
 .st-key-presets .stButton button {{ justify-content: flex-start; border: none; background: transparent;
     color: {INK}; font-weight: 500; font-size: 0.9rem; padding: 10px 12px; border-radius: 0;
     border-left: 3px solid transparent; }}
 .st-key-presets .stButton button:hover {{ background: {ACCENT_SOFT}; color: {INK}; }}
 .st-key-presets .stButton button > div, .st-key-presets .stButton button [data-testid="stMarkdownContainer"] {{
-    justify-content: flex-start; width: 100%; text-align: left; }}
-.st-key-presets .stButton button p {{ text-align: left; }}
+    justify-content: flex-start; min-width: 0; text-align: left; }}
+.st-key-presets .stButton button p {{ text-align: left; white-space: normal; overflow-wrap: anywhere; }}
 .st-key-presets [data-testid="stVerticalBlock"] {{ gap: 2px; }}
 
 .aw-recent {{ display: flex; justify-content: space-between; gap: 10px; padding: 9px 0; font-size: 0.86rem;
               color: {INK}; border-bottom: 1px solid #F4F5F8; }}
-.aw-recent span:first-child {{ overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
+.aw-recent span:first-child {{ min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }}
 .aw-recent span:last-child {{ color: {SUBTLE}; font-size: 0.76rem; flex: none; }}
 .aw-recent.current span:first-child {{ color: {ACCENT}; font-weight: 600; }}
 .aw-empty-side {{ font-size: 0.82rem; color: {SUBTLE}; padding: 6px 0; }}
