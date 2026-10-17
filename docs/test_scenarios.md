@@ -5,8 +5,10 @@
 автоматизирована в `tests/test_scenarios.py`:
 
 ```bash
-python scripts/build_index.py      # один раз, ~2 мин на первом запуске (скачивание модели)
-python -m pytest tests -q
+uv sync --locked
+uv run python -m pytest tests -q
+# Векторный индекс необязателен: uv sync --locked --extra vector
+# uv run --extra vector python scripts/build_index.py
 ```
 
 **Опорные точки:**
@@ -17,7 +19,8 @@ python -m pytest tests -q
 **Время** везде задаётся явно через `now_iso` (часовой пояс Астаны, UTC+5), чтобы результат
 воспроизводился. 16.10.2026 — пятница.
 
-**Данные:** 966 POI из OpenStreetMap, срез от 16.10.2026. Часы работы указаны у ~35% мест,
+**Данные:** 975 POI: 966 из OpenStreetMap (срез 16.10.2026) и 9 из Visit Astana.
+Часы работы указаны примерно у 35% мест,
 описания почти отсутствуют. От этого зависят ожидания ниже.
 
 ---

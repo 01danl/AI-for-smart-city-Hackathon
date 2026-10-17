@@ -48,12 +48,28 @@
 
 ### 1. Установка зависимостей и настройка `.env`
 
+Установите [uv](https://docs.astral.sh/uv/getting-started/installation/), если его ещё нет
+(`brew install uv` на macOS с Homebrew). Из корня репозитория:
+
 ```bash
-pip install -r requirements.txt
-cp .env.example .env
-# При желании укажите свой ключ OPENROUTER_API_KEY в .env
-# (без ключа система также полностью работоспособна в режиме smart_fallback)
+uv sync --locked
+cp -n .env.example .env
 ```
+
+`uv sync` создаёт `.venv` с Python 3.12 и ставит зависимости из `uv.lock`.
+`cp -n` сохраняет уже существующий `.env`. Укажите в нём `OPENROUTER_API_KEY`,
+если хотите ответы модели; без ключа работает `smart_fallback`.
+
+Если хотите работать внутри окружения в текущем терминале:
+
+```bash
+source .venv/bin/activate
+python --version
+# выйти из окружения: deactivate
+```
+
+Команды ниже используют `uv run`, поэтому активация не требуется. В редакторе
+выберите интерпретатор `.venv/bin/python`.
 
 ### Официальное дополнение данных
 
@@ -64,9 +80,9 @@ cp .env.example .env
 [ссылки и подтверждения полей](data/poi_sources.json).
 
 ```bash
-python scripts/collect_official_poi.py --download  # загрузить и проверить, без изменения базы
-python scripts/collect_official_poi.py           # проверить сохранённые страницы и соседние POI
-python scripts/collect_official_poi.py --apply   # применить проверенный список
+uv run python scripts/collect_official_poi.py --download  # загрузить и проверить
+uv run python scripts/collect_official_poi.py             # показать соседние POI
+uv run python scripts/collect_official_poi.py --apply     # применить проверенный список
 ```
 
 ### 2. (Опционально) Сбор данных из OSM и сборка векторного индекса Chroma
@@ -75,20 +91,23 @@ python scripts/collect_official_poi.py --apply   # применить прове
 приложение использует поиск BM25 по этим данным. Чтобы пересобрать индекс Chroma:
 
 ```bash
-python scripts/collect_osm.py              # необязательно: свежий запрос в Overpass API
-python scripts/build_index.py              # строит векторный индекс в data/chroma/
+uv run python scripts/collect_osm.py  # необязательно: свежий запрос в Overpass API
+uv sync --locked --extra vector
+uv run --extra vector python scripts/build_index.py  # индекс в data/chroma/
 ```
 
 ### 3. Запуск интерактивного демо (Streamlit UI)
 
 ```bash
-streamlit run frontend/app.py
+uv run streamlit run frontend/app.py --server.address 127.0.0.1 --server.port 8501
 ```
+
+Откройте http://127.0.0.1:8501. Для API используйте второй терминал.
 
 ### 4. Запуск REST API (FastAPI)
 
 ```bash
-uvicorn backend.api.app:app --reload --port 8000
+uv run uvicorn backend.api.app:app --host 127.0.0.1 --port 8000
 ```
 
 Пример запроса к API:
@@ -109,5 +128,5 @@ curl -X POST http://localhost:8000/recommend \
 ### 5. Запуск автотестов
 
 ```bash
-python -m pytest tests -q
+uv run python -m pytest tests -q
 ```
