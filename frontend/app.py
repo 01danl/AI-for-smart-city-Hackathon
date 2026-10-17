@@ -56,14 +56,19 @@ from backend.generation.voice import has_server_asr as _server_asr_ready  # noqa
 from backend.generation.voice import transcribe_b64_wav as _server_transcribe  # noqa: E402
 from backend.retrieval import BACKEND, parse_query_intent, retrieve  # noqa: E402
 from backend.retrieval import warmup as _retrieval_warmup  # noqa: E402
+from backend.retrieval import feedback as _feedback  # noqa: E402
+from backend.retrieval.events import events_near  # noqa: E402
 from backend.retrieval.geo import round_coords  # noqa: E402
 from backend.retrieval.index import load_pois  # noqa: E402
 from frontend.geolocation import GEOLOCATION_JS, geolocation_error  # noqa: E402
 from frontend.voice_input import transcribe_question  # noqa: E402
+from frontend.share import Stop, maps_route_url, qr_svg, share_text, telegram_url, whatsapp_url  # noqa: E402
 from frontend.i18n import (  # noqa: E402
     LANG_SHORT,
     LANGS,
     category_label,
+    duration_text,
+    event_kind_label,
     geo_error,
     landmark_name,
     landmark_note,
@@ -140,7 +145,27 @@ WEATHER_LABELS = {
 PRESET_ICONS = [
     ":material/directions_walk:", ":material/local_cafe:", ":material/child_care:",
     ":material/flight_takeoff:", ":material/nightlife:", ":material/museum:",
+    ":material/theater_comedy:",
 ]
+
+# Demo scenario on top of the jury ones, set on the pitch day: a real event from
+# data/events.json (Republic Day concert at Zhastar Palace, 22.10 at 19:00) shows up in the
+# "nearby around this time" block.
+EXTRA_PRESETS: list[dict] = [
+    {
+        "id": "preset_evening_events",
+        "title": "Вечер в городе: что идёт сегодня",
+        "query": "Чем заняться сегодня вечером? Хочется чего-то культурного рядом.",
+        "lat": 51.1694,
+        "lon": 71.4491,
+        "max_distance_m": 2500,
+        "now_iso": "2026-10-22T17:40",
+        "accessible": False,
+        "group_size": 2,
+        "weather": "normal",
+    },
+]
+DEMO_PRESETS = OFFICIAL_PRESETS + EXTRA_PRESETS
 
 CUSTOM_POINT = "Свои координаты"
 
@@ -301,6 +326,29 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .aw-links a:hover {{ border-color: {ACCENT}; }}
 .aw-pill-start b {{ color: {ACCENT}; font-weight: 700; }}
 
+/* Per-card rows of the latest answer and their feedback buttons */
+.aw-row-card {{ margin: 0 0 0 46px; }}
+.aw-row-card .aw-card {{ margin-top: 10px; }}
+[class*="st-key-fbrow_"] {{ margin: 2px 0 0 46px; gap: 6px; align-items: center; }}
+[class*="st-key-fbrow_"] button {{ min-height: 30px; padding: 2px 12px; border-radius: 999px;
+    border: 1px solid {LINE}; background: {PANEL}; font-size: 0.85rem; }}
+[class*="st-key-fbrow_"] button:hover {{ border-color: {ACCENT}; }}
+[class*="st-key-fbrow_"] [data-testid="stCaptionContainer"] {{ margin: 0; }}
+.aw-warn {{ font-size: 0.78rem; color: #946200; background: #FDF3DC; border-radius: 8px;
+            padding: 5px 9px; margin-top: 6px; }}
+
+/* Temporary events */
+.aw-ev-head {{ font-weight: 700; color: {INK}; font-size: 0.9rem; margin: 14px 0 0 2px; }}
+.aw-event {{ border-left: 3px solid #7C3AED; }}
+.aw-badge-temp {{ flex: none; color: #6D28D9; background: #F3E8FF; }}
+
+/* Share to phone */
+.aw-qr {{ display: flex; justify-content: center; padding: 6px 0 2px; }}
+.aw-qr svg {{ width: 300px; height: 300px; max-width: 100%; shape-rendering: crispEdges;
+              image-rendering: pixelated; }}
+.aw-qr-big svg {{ width: min(70vh, 640px); height: min(70vh, 640px); }}
+.aw-qr-hint {{ font-size: 0.8rem; color: {MUTED}; text-align: center; margin: 6px 4px 10px; line-height: 1.45; }}
+
 /* Loading skeleton */
 @keyframes aw-shimmer {{ 0% {{ background-position: -320px 0; }} 100% {{ background-position: 320px 0; }} }}
 .aw-loading {{ color: {MUTED}; }}
@@ -382,6 +430,7 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
     .aw-head {{ padding: 14px 64px 14px 14px; flex-direction: column; align-items: flex-start; }}
     .aw-pills {{ justify-content: flex-start; }}
     .st-key-messages [data-testid="stExpander"] {{ margin-left: 0; }}
+    .aw-row-card, [class*="st-key-fbrow_"] {{ margin-left: 0; }}
 }}
 </style>
 """
@@ -810,7 +859,7 @@ def _context_chips(u) -> str:
     return "".join(f'<span class="aw-chip">{c}</span>' for c in chips)
 
 
-def _card_html(idx: int, rec) -> str:
+def _card_html(idx: int, rec, closed_reports: int = 0) -> str:
     lang = L()
     st_label, st_fg, st_bg = _status(rec.open_status)
     src_label, src_code = _source(rec.source)
@@ -843,6 +892,7 @@ def _card_html(idx: int, rec) -> str:
             <p><span class="aw-k">{t("why", lang)}</span>{escape(rec.why)}</p>
             <p><span class="aw-k">{t("what", lang)}</span>{escape(rec.what_to_do)}</p>
             <div class="aw-note">{escape(rec.confidence_note)}</div>
+            {f'<div class="aw-warn">{t("fb_closed_warning", lang, n=closed_reports)}</div>' if closed_reports else ""}
             {official}
             <div class="aw-links">
                 <a href="https://www.google.com/maps/dir/?api=1&destination={rec.lat:.6f},{rec.lon:.6f}&travelmode=walking"
@@ -858,20 +908,88 @@ def _card_html(idx: int, rec) -> str:
     """
 
 
-def render_answer(req: RecommendRequest, resp: RecommendResponse, latest: bool) -> None:
+def render_events(req: RecommendRequest, resp: RecommendResponse) -> None:
+    """Temporary events at venues within reach around the chosen time (data/events.json)."""
+    lang = L()
+    lat, lon = resp.used_data.rounded_coords
+    found = events_near(lat, lon, load_pois(), now_iso=req.now_iso, max_distance_m=max(req.max_distance_m, 2500))
+    if not found:
+        return
+    cards = []
+    for c in found:
+        ev = c.event
+        if c.status == "ongoing":
+            when = t("ev_ongoing", lang)
+        elif c.status == "starts_soon":
+            when = t("ev_soon", lang, t=duration_text(c.minutes_to_start, lang))
+        else:
+            when = t("ev_later", lang, time=ev.start[11:16])
+        checked = ".".join(reversed(ev.checked_at.split("-")))[:5]
+        cards.append(f"""
+            <div class="aw-card aw-event">
+                <div class="aw-card-top">
+                    <div><div class="aw-name">{escape(ev.title)}</div>
+                         <div class="aw-cat">{event_kind_label(ev.kind, lang)} · {escape(c.venue.name)}</div></div>
+                    <span class="aw-badge aw-badge-temp">{t("ev_temporary", lang)}</span>
+                </div>
+                <div class="aw-meta">
+                    <span><b>{when}</b></span>
+                    <span>{t("card_away", lang, d=c.distance_m)}</span>
+                    <span>{t("card_walk", lang, m=c.walk_min)}</span>
+                </div>
+                <div class="aw-note"><a href="{escape(ev.source_url)}" target="_blank" rel="noopener">
+                    {t("ev_source", lang, date=checked)}</a> · {t("ev_note", lang)}</div>
+            </div>""")
+    _html(f"""
+        <div class="aw-row aw-row-card"><div class="aw-answer">
+            <div class="aw-ev-head">{t("ev_title", lang)}</div>
+            {"".join(cards)}
+        </div></div>
+        """)
+
+
+def vote(entry_key: str, poi_id: str, value: str, reason: str | None = None) -> None:
+    """Feedback button callback: store the vote anonymously and remember it for this card."""
+    _feedback.record_vote(poi_id, value, reason, lang=L())  # type: ignore[arg-type]
+    st.session_state.setdefault("voted", {})[f"{entry_key}:{poi_id}"] = value
+
+
+def render_feedback(entry_key: str, rec) -> None:
+    """👍 / 👎 row under a card of the latest answer."""
+    lang = L()
+    voted = st.session_state.get("voted", {}).get(f"{entry_key}:{rec.poi_id}")
+    with st.container(key=f"fbrow_{entry_key}_{rec.poi_id}", horizontal=True):
+        if voted:
+            st.caption(("👍 " if voted == "up" else "👎 ") + t("fb_thanks", lang))
+            return
+        st.button("👍", key=f"fb_up_{entry_key}_{rec.poi_id}", help=t("fb_up", lang),
+                  on_click=vote, args=(entry_key, rec.poi_id, "up"))
+        with st.popover("👎", help=t("fb_down", lang), key=f"fb_dnpop_{entry_key}_{rec.poi_id}"):
+            for reason in _feedback.REASONS:
+                st.button(t(f"fb_reason_{reason}", lang), key=f"fb_dn_{reason}_{entry_key}_{rec.poi_id}",
+                          on_click=vote, args=(entry_key, rec.poi_id, "down", reason), use_container_width=True)
+
+
+def render_answer(req: RecommendRequest, resp: RecommendResponse, latest: bool, entry_key: str = "") -> None:
     u = resp.used_data
     lang = L()
+    fb = _feedback.load_feedback()
+    footer = ""
     if resp.recommendations:
         n = len(resp.recommendations)
         intro = t("found_1", lang) if n == 1 else t("found_n", lang, n=n)
-        cards = "".join(_card_html(i, r) for i, r in enumerate(resp.recommendations, start=1))
-        footer = (
-            f'<details class="aw-disclaimer"><summary>{t("about_data", lang)}</summary>'
-            f"{escape(resp.disclaimer)}</details>" if latest else ""
-        )
+        if latest:
+            footer = (f'<details class="aw-disclaimer"><summary>{t("about_data", lang)}</summary>'
+                      f"{escape(resp.disclaimer)}</details>")
     else:
         intro = f"<b>{t('nothing_found', lang)}</b> " + escape(resp.disclaimer)
-        cards, footer = "", ""
+
+    def closed(rec) -> int:
+        return fb[rec.poi_id].closed if rec.poi_id in fb else 0
+
+    cards = "" if latest else "".join(
+        _card_html(i, r, closed(r)) for i, r in enumerate(resp.recommendations, start=1)
+    )
     _html(f"""
         <div class="aw-row">
             <div class="aw-bot-badge">AW</div>
@@ -879,15 +997,23 @@ def render_answer(req: RecommendRequest, resp: RecommendResponse, latest: bool) 
                 <div class="aw-bubble">{intro}<div class="aw-time">{_hhmm(req)} ✓✓</div></div>
                 <div class="aw-context">{_context_chips(u)}</div>
                 {cards}
-                {footer}
             </div>
         </div>
         """)
+    if latest:
+        # Each card is its own block so real 👍 / 👎 buttons can sit under it.
+        for i, rec in enumerate(resp.recommendations, start=1):
+            _html(f'<div class="aw-row aw-row-card"><div class="aw-answer">{_card_html(i, rec, closed(rec))}</div></div>')
+            render_feedback(entry_key, rec)
+        render_events(req, resp)
+        if footer:
+            _html(f'<div class="aw-row aw-row-card"><div class="aw-answer">{footer}</div></div>')
     if latest and resp.recommendations:
         if st.session_state.show_settings:  # otherwise the map lives in the right panel
             with st.expander(t("map_route", lang), icon=":material/map:", expanded=True):
                 render_map(resp)
                 render_route(resp)
+                render_share(resp)
         with st.expander(t("how_it_works", lang), icon=":material/manage_search:"):
             render_inspector(req, resp)
 
@@ -1036,6 +1162,40 @@ def render_route_timeline(resp: RecommendResponse) -> None:
         """)
 
 
+def _share_stops(resp: RecommendResponse) -> list[Stop]:
+    """The walking route if there is one, otherwise the recommended places in order."""
+    if resp.route and len(resp.route.stops) >= 2:
+        return [Stop(s.name, s.lat, s.lon, s.from_prev_walk_min) for s in resp.route.stops]
+    return [Stop(r.name, r.lat, r.lon, r.walk_min) for r in resp.recommendations]
+
+
+@st.dialog(" ", width="large")
+def show_big_qr(url: str, hint: str) -> None:
+    """Full-size QR for the stage: scannable from a projector or across the table."""
+    _html(f'<div class="aw-qr aw-qr-big">{qr_svg(url)}</div><div class="aw-qr-hint">{escape(hint)}</div>')
+
+
+def render_share(resp: RecommendResponse) -> None:
+    """'To phone' popover: QR code with the Google Maps route, Telegram and WhatsApp links."""
+    stops = _share_stops(resp)
+    if not stops:
+        return
+    lang = L()
+    url = maps_route_url(stops)
+    text = share_text(stops, lang)
+    col_share, col_big = st.columns([3, 2], gap="small")
+    if col_big.button(t("share_big", lang), key="share_big", icon=":material/fullscreen:", use_container_width=True):
+        show_big_qr(url, t("share_hint", lang))
+    with col_share.popover(t("share_btn", lang), icon=":material/qr_code_2:", use_container_width=True,
+                           key="share_popover"):
+        _html(f'<div class="aw-qr">{qr_svg(url)}</div><div class="aw-qr-hint">{t("share_hint", lang)}</div>')
+        c1, c2 = st.columns(2)
+        c1.link_button("Telegram", telegram_url(text, url), icon=":material/send:", use_container_width=True)
+        c2.link_button("WhatsApp", whatsapp_url(text, url), icon=":material/chat:", use_container_width=True)
+        st.link_button(t("share_open", lang), url, icon=":material/map:", use_container_width=True)
+        st.caption(t("share_privacy", lang))
+
+
 def render_route(resp: RecommendResponse) -> None:
     rt = resp.route
     if not rt:
@@ -1078,6 +1238,10 @@ def render_inspector(req: RecommendRequest, resp: RecommendResponse) -> None:
         req.query, u.rounded_coords[0], u.rounded_coords[1],
         max_distance_m=req.max_distance_m, now_iso=req.now_iso, top_k=6,
     )
+    totals = _feedback.summary()
+    if totals["votes"]:
+        st.info(t("fb_summary", lang, votes=totals["votes"], pct=round(100 * totals["up"] / totals["votes"]),
+                  closed=totals["closed_places"]), icon=":material/thumbs_up_down:")
     st.markdown(t("how_step1", lang))
     st.json(json.loads(u.model_dump_json()), expanded=True)
     if cands:
@@ -1146,7 +1310,7 @@ with col_side:
 
         st.markdown(f'<div class="aw-side-title">{t("scenarios", lang)}</div>', unsafe_allow_html=True)
         with st.container(key="presets"):
-            for idx, preset in enumerate(OFFICIAL_PRESETS):
+            for idx, preset in enumerate(DEMO_PRESETS):
                 st.button(
                     preset_title(preset, lang),
                     key=f"btn_{preset['id']}",
@@ -1244,7 +1408,7 @@ with col_chat:
                     loading.empty()
                 else:
                     resp = entry_response(entry)
-                render_answer(req, resp, latest=latest)
+                render_answer(req, resp, latest=latest, entry_key=f"{convo['id']}_{i}")
                 if latest:
                     render_chat_header(header, resp.used_data.generation_mode)
 
@@ -1265,6 +1429,7 @@ if col_settings is None:
             _last = entry_response(_convo["entries"][-1]) if _convo and _convo["entries"] else None
             if _last is not None and _last.recommendations:
                 render_map(_last, height=420)
+                render_share(_last)
                 render_route_timeline(_last)
             else:
                 _html(f"""

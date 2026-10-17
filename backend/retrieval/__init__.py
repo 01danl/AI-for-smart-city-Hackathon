@@ -54,6 +54,20 @@ else:
         return {p.id: p for p in _STUB_POIS}
 
 
+from . import feedback as _feedback  # noqa: E402
+
+_base_retrieve = retrieve
+
+
+def retrieve(query: str, lat: float, lon: float, *, top_k: int = 8, **kwargs) -> list[Candidate]:
+    """Backend retrieval, nudged by anonymous 👍/👎 feedback (see backend/retrieval/feedback.py).
+
+    A few extra candidates are fetched so a demoted place can be replaced, not just reordered.
+    """
+    pool = _base_retrieve(query, lat, lon, top_k=top_k + _feedback.MAX_SHIFT_DOWN, **kwargs)
+    return _feedback.rerank(pool, top_k)
+
+
 def get_poi(poi_id: str) -> POI | None:
     """Look up a POI by id, e.g. to verify the LLM only returned ids from retrieval results."""
     return _load_pois().get(poi_id)

@@ -1,0 +1,134 @@
+[
+ {
+  "id": "tckt_usmanova_20261020",
+  "title": "Юлдуз Усманова в Астане",
+  "kind": "concert",
+  "venue_poi_id": "osm_node_4916363251",
+  "start": "2026-10-20T19:00",
+  "source_url": "https://ticketon.kz/concerts/event/tckt2-yulduz-usmanova-v-astane",
+  "checked_at": "2026-10-18"
+ },
+ {
+  "id": "tckt_lost_world_20261021_11",
+  "title": "Экскурсия «Затерянный мир Великой степи» (на казахском)",
+  "kind": "exhibition",
+  "venue_poi_id": "osm_node_4894937300",
+  "start": "2026-10-21T11:00",
+  "source_url": "https://ticketon.kz/museums/event/tckt2-zateryannyy-mir-velikoy-stepi-astana",
+  "checked_at": "2026-10-18"
+ },
+ {
+  "id": "tckt_golden_centaurs_20261021",
+  "title": "Экскурсия «Золотые кентавры: вооружение воинов Золотой Орды»",
+  "kind": "exhibition",
+  "venue_poi_id": "osm_node_4894937300",
+  "start": "2026-10-21T14:00",
+  "source_url": "https://ticketon.kz/museums/event/tckt2-zolotye-kentavry-astana",
+  "checked_at": "2026-10-18"
+ },
+ {
+  "id": "tckt_lost_world_20261021_15",
+  "title": "Экскурсия «Затерянный мир Великой степи» (на русском)",
+  "kind": "exhibition",
+  "venue_poi_id": "osm_node_4894937300",
+  "start": "2026-10-21T15:00",
+  "source_url": "https://ticketon.kz/museums/event/tckt2-zateryannyy-mir-velikoy-stepi-astana",
+  "checked_at": "2026-10-18"
+ },
+ {
+  "id": "tckt_republic_day_20261022",
+  "title": "Праздничный концерт ко Дню Республики Казахстан",
+  "kind": "concert",
+  "venue_poi_id": "visitastana_dvorets-zhastar",
+  "start": "2026-10-22T19:00",
+  "source_url": "https://ticketon.kz/concerts/event/tckt2-prazdnichnyy-kontsert-ko-dnyu-respubliki-kazahstan-vo-dvortse-zhastar",
+  "checked_at": "2026-10-18"
+ },
+ {
+  "id": "tckt_lost_world_20261024_13",
+  "title": "Экскурсия «Затерянный мир Великой степи» (на казахском)",
+  "kind": "exhibition",
+  "venue_poi_id": "osm_node_4894937300",
+  "start": "2026-10-24T13:00",
+  "source_url": "https://ticketon.kz/museums/event/tckt2-zateryannyy-mir-velikoy-stepi-astana",
+  "checked_at": "2026-10-18"
+ },
+ {
+  "id": "tckt_golden_centaurs_20261024",
+  "title": "Экскурсия «Золотые кентавры: вооружение воинов Золотой Орды»",
+  "kind": "exhibition",
+  "venue_poi_id": "osm_node_4894937300",
+  "start": "2026-10-24T14:00",
+  "source_url": "https://ticketon.kz/museums/event/tckt2-zolotye-kentavry-astana",
+  "checked_at": "2026-10-18"
+ },
+ {
+  "id": "tckt_lost_world_20261024_15",
+  "title": "Экскурсия «Затерянный мир Великой степи» (на русском)",
+  "kind": "exhibition",
+  "venue_poi_id": "osm_node_4894937300",
+  "start": "2026-10-24T15:00",
+  "source_url": "https://ticketon.kz/museums/event/tckt2-zateryannyy-mir-velikoy-stepi-astana",
+  "checked_at": "2026-10-18"
+ },
+ {
+  "id": "fc_astana_kaisar_20261025",
+  "title": "ФК «Астана» — «Кайсар», Премьер-лига, 29 тур",
+  "kind": "match",
+  "venue_poi_id": "osm_way_1460088073",
+  "start": "2026-10-25T19:00",
+  "duration_min": 120,
+  "source_url": "https://kffleague.kz/matches/1111",
+  "checked_at": "2026-10-18"
+ },
+ {
+  "id": "opera_677_20261028",
+  "title": "Jazz Lounge в Опере (Камерный зал)",
+  "kind": "concert",
+  "venue_poi_id": "osm_way_917478479",
+  "start": "2026-10-28T19:00",
+  "duration_min": 90,
+  "source_url": "https://astanaopera.kz/ru/afisha/677",
+  "checked_at": "2026-10-18"
+ },
+ {
+  "id": "opera_678_20261030",
+  "title": "«Когда встречаются классика и фламенко» (Камерный зал)",
+  "kind": "concert",
+  "venue_poi_id": "osm_way_917478479",
+  "start": "2026-10-30T19:00",
+  "duration_min": 90,
+  "source_url": "https://astanaopera.kz/ru/afisha/678",
+  "checked_at": "2026-10-18"
+ },
+ {
+  "id": "opera_697_20261031",
+  "title": "Балет «Чарли и Ирэн» (Большой зал)",
+  "kind": "performance",
+  "venue_poi_id": "osm_way_917478479",
+  "start": "2026-10-31T17:00",
+  "duration_min": 120,
+  "source_url": "https://astanaopera.kz/ru/afisha/697",
+  "checked_at": "2026-10-18"
+ },
+ {
+  "id": "opera_697_20261101",
+  "title": "Балет «Чарли и Ирэн» (Большой зал)",
+  "kind": "performance",
+  "venue_poi_id": "osm_way_917478479",
+  "start": "2026-11-01T17:00",
+  "duration_min": 120,
+  "source_url": "https://astanaopera.kz/ru/afisha/697",
+  "checked_at": "2026-10-18"
+ },
+ {
+  "id": "opera_705_20261101",
+  "title": "Концерт «В мире музыки»",
+  "kind": "concert",
+  "venue_poi_id": "osm_way_917478479",
+  "start": "2026-11-01T17:00",
+  "duration_min": 50,
+  "source_url": "https://astanaopera.kz/ru/afisha/705",
+  "checked_at": "2026-10-18"
+ }
+]
