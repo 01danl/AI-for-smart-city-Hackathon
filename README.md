@@ -1,6 +1,6 @@
 <div align="center">
 
-# Astana Walk AI — ИИ-помощник по прогулкам в Астане
+# Astana Walk AI ИИ-помощник по прогулкам в Астане
 
 **Hybrid Geosemantical RAG:** реальные места из OpenStreetMap + Visit Astana, честные источники, ноль выдуманных кофейен
 
