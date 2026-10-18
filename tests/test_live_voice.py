@@ -61,6 +61,9 @@ def test_voice_search_uses_real_pois_no_llm_no_coords_in_model_payload(monkeypat
         assert get_poi(place["poi_id"]) is not None
         assert place["distance_m"] <= context.max_distance_m
         assert place["activity_source"] == "generated_idea"
+    if response.route:
+        assert [stop["poi_id"] for stop in payload["route"]["stops"]] == [stop.poi_id for stop in response.route.stops]
+        assert payload["route"]["total_walk_min"] == response.route.total_walk_min
     serialized = json.dumps(payload)
     for private_field in ['"lat"', '"lon"', '"rounded_coords"', '"origin_rounded"', "51.128337", "71.430583"]:
         assert private_field not in serialized

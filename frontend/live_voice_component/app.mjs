@@ -3,10 +3,11 @@ import { AudioQueue, encodePCM } from "./audio.mjs";
 const $ = id => document.getElementById(id);
 let args = {}, socket, stream, inputContext, outputContext, processor, source, silent, audio;
 let requestId = null, connecting = false, opening = false, ready = false, muted = false, timer, deadline;
-let sequence = 0, inflight = null, outbox = [], userText = "", assistantText = "";
+let sequence = 0, inflight = null, outbox = [], turn = null, turnNumber = 0, speechTimer;
 const pending = new Map(), cancelled = new Set(), delivered = new Set();
 const bridge = (type, value = {}) => parent.postMessage({ isStreamlitMessage: true, type, ...value }, "*");
-const resize = () => bridge("streamlit:setFrameHeight", { height: document.body.scrollHeight + 4 });
+// Measure content, not the iframe viewport: repeated chat updates must not grow the composer.
+const resize = () => bridge("streamlit:setFrameHeight", { height: Math.ceil($("panel").getBoundingClientRect().height) + 4 });
 
 function flush() {
     if (inflight || !outbox.length) return;
@@ -14,10 +15,17 @@ function flush() {
     bridge("streamlit:setComponentValue", { value: inflight, dataType: "json" });
 }
 function emit(type, payload = {}) {
+    if (type === "speech") {
+        // Replace queued partial text; never pile up reruns behind a slow search.
+        outbox = outbox.filter(event => event.type !== "speech" || event.turn_id !== payload.turn_id);
+    }
     outbox.push({ id: `${requestId || "idle"}:${++sequence}`, session: requestId, type, ...payload });
     flush();
 }
-function status(text) { $("status").textContent = text; }
+function status(text, phase = "idle") {
+    $("status").textContent = text;
+    $("panel").dataset.phase = phase;
+}
 function error(text) { $("error").textContent = text; $("error").hidden = !text; resize(); }
 function send(value) { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify(value)); }
 function controls(active) {
@@ -25,25 +33,26 @@ function controls(active) {
     $("stop").hidden = !active;
     $("mute").hidden = !ready;
 }
-function transcript(role, text) {
-    if (!text.trim()) return;
-    const turn = document.createElement("div");
-    turn.className = `turn ${role}`;
-    const label = document.createElement("small");
-    label.textContent = role === "user" ? "Вы" : "Astana Walk";
-    turn.append(label, document.createTextNode(text.trim()));
-    $("transcript").append(turn);
-    while ($("transcript").children.length > 12) $("transcript").firstElementChild.remove();
-    $("transcript").scrollTop = $("transcript").scrollHeight;
-    resize();
+function currentTurn() {
+    if (!turn) turn = { id: String(++turnNumber), question: "", answer: "", awaitingTool: false, hasOutput: false };
+    return turn;
+}
+function publishSpeech(final = false, interrupted = false) {
+    clearTimeout(speechTimer); speechTimer = null;
+    if (!turn || (!turn.question && !turn.answer)) return;
+    emit("speech", { turn_id: turn.id, question: turn.question, answer: turn.answer, final, interrupted });
+}
+function scheduleSpeech() {
+    if (!speechTimer) speechTimer = setTimeout(() => publishSpeech(), 600);
 }
 function finishTurn(interrupted = false) {
-    transcript("user", userText);
-    transcript("assistant", assistantText + (interrupted && assistantText ? " …" : ""));
-    userText = ""; assistantText = "";
+    publishSpeech(true, interrupted);
+    turn = null;
 }
 function stop(note = "Разговор завершён", report = true) {
     const oldId = requestId;
+    if (report) finishTurn();
+    else { clearTimeout(speechTimer); turn = null; }
     connecting = false; opening = false; ready = false; requestId = null;
     clearTimeout(timer); clearTimeout(deadline);
     if (socket) { socket.onclose = null; socket.onerror = null; socket.close(); socket = null; }
@@ -57,7 +66,7 @@ function stop(note = "Разговор завершён", report = true) {
     muted = false;
     $("mute").textContent = "Выключить микрофон";
     $("mute").setAttribute("aria-pressed", "false");
-    finishTurn(); controls(false); status(note);
+    controls(false); status(note);
     if (report && oldId) emit("stopped", { closed_session: oldId });
     resize();
 }
@@ -72,7 +81,7 @@ async function start() {
     error("");
     requestId = crypto.randomUUID();
     const id = requestId;
-    connecting = true; controls(true); status("Разрешите доступ к микрофону…");
+    connecting = true; controls(true); status("Разрешите доступ к микрофону…", "connecting");
     timer = setTimeout(() => fail("Не удалось подключиться за 45 секунд. Проверьте разрешение микрофона и сеть."), 45000);
     try {
         // Resume output during the click gesture, before waiting for network/authentication.
@@ -86,7 +95,7 @@ async function start() {
         if (id !== requestId) { media.getTracks().forEach(track => track.stop()); return; }
         stream = media;
         stream.getAudioTracks()[0].onended = () => stop("Доступ к микрофону завершён");
-        status("Подключаю голосового помощника…");
+        status("Подключаю голосового помощника…", "connecting");
         emit("connect");
     } catch (exc) {
         if (id !== requestId) return;
@@ -139,29 +148,48 @@ function handleMessage(message, seconds) {
     if (message.setupComplete) {
         clearTimeout(timer); connecting = false; ready = true;
         deadline = setTimeout(() => stop("Лимит разговора — 10 минут. Подключитесь снова."), seconds * 1000);
-        controls(true); status("Слушаю — можно говорить и перебивать"); resize();
+        controls(true); status("Слушаю — можно говорить и перебивать", "listening"); resize();
     }
     const content = message.serverContent;
     if (content) {
-        if (content.interrupted) { audio.clear(); finishTurn(true); status(muted ? "Микрофон выключен" : "Слушаю…"); }
-        userText += content.inputTranscription?.text || "";
-        assistantText += content.outputTranscription?.text || "";
+        if (content.interrupted) {
+            audio.clear(); finishTurn(true);
+            status(muted ? "Микрофон выключен" : "Слушаю…", muted ? "muted" : "listening");
+        }
+        if (content.inputTranscription?.text) {
+            currentTurn().question += content.inputTranscription.text;
+            scheduleSpeech();
+        }
+        if (content.outputTranscription?.text) {
+            const active = currentTurn();
+            active.answer += content.outputTranscription.text;
+            active.awaitingTool = false; active.hasOutput = true;
+            scheduleSpeech();
+        }
         for (const part of content.modelTurn?.parts || []) {
             if (part.inlineData?.data) {
                 const mime = part.inlineData.mimeType || "audio/pcm;rate=24000";
                 if (!mime.startsWith("audio/pcm")) continue;
                 const rate = Number(mime.match(/rate=(\d+)/)?.[1] || 24000);
+                currentTurn().awaitingTool = false; currentTurn().hasOutput = true;
                 audio.enqueue(part.inlineData.data, rate);
-                status("Отвечаю — можно перебить");
+                status("Отвечаю — можно перебить", "speaking");
             }
         }
-        if (content.turnComplete) { finishTurn(); status(muted ? "Микрофон выключен" : "Слушаю…"); }
+        // Gemini emits a turnComplete at the tool boundary, before the spoken answer.
+        if (content.turnComplete && !message.toolCall && !turn?.awaitingTool) {
+            finishTurn();
+            status(muted ? "Микрофон выключен" : "Слушаю…", muted ? "muted" : "listening");
+        }
     }
     if (message.toolCall) {
         const calls = message.toolCall.functionCalls || [];
+        const active = currentTurn();
+        active.awaitingTool = true;
         for (const call of calls) pending.set(call.id, call.name);
-        status("Ищу реальные места рядом…");
-        emit("tool", { calls, question: userText.slice(0, 1000) });
+        publishSpeech();
+        status("Ищу места и строю маршрут…", "searching");
+        emit("tool", { calls, turn_id: active.id, question: active.question.slice(0, 1000) });
     }
     for (const id of message.toolCallCancellation?.ids || []) { cancelled.add(id); pending.delete(id); }
     if (message.goAway) stop("Сессия Gemini заканчивается. Начните новый разговор.");
@@ -177,7 +205,7 @@ function toolResults(results) {
     if (ready && responses.length) {
         send({ toolResponse: { functionResponses: responses } });
         emit("used", { call_ids: responses.map(item => item.id) });
-        status("Готовлю ответ…");
+        status("Готовлю ответ…", "searching");
     }
 }
 
@@ -189,7 +217,7 @@ $("mute").onclick = () => {
     if (muted) send({ realtimeInput: { audioStreamEnd: true } });
     $("mute").textContent = muted ? "Включить микрофон" : "Выключить микрофон";
     $("mute").setAttribute("aria-pressed", String(muted));
-    status(muted ? "Микрофон выключен" : "Слушаю…");
+    status(muted ? "Микрофон выключен" : "Слушаю…", muted ? "muted" : "listening");
 };
 window.addEventListener("message", event => {
     if (event.source !== parent || event.data.type !== "streamlit:render") return;

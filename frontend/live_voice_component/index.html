@@ -8,20 +8,19 @@
 </head>
 <body>
   <section aria-label="Голосовой помощник" id="panel">
-    <div class="heading"><span class="orb" aria-hidden="true">AW</span><div>
-      <strong>Голосовой помощник</strong><div id="status" role="status" aria-live="polite">Можно говорить и перебивать</div>
-    </div></div>
-    <p class="privacy">При старте звук передаётся Google Gemini. Мы не сохраняем аудио.
-      На бесплатном тарифе Google может использовать данные для улучшения моделей.</p>
-    <div class="controls">
+    <div class="heading"><span class="orb" aria-hidden="true"><span class="wave"><i></i><i></i><i></i><i></i><i></i></span></span><div class="heading-copy">
+      <strong>Astana Walk · голос</strong><div id="status" role="status" aria-live="polite">Говорите на любом языке</div>
+    </div><div class="controls">
       <button id="start" type="button">Начать разговор</button>
       <button id="mute" type="button" hidden aria-pressed="false">Выключить микрофон</button>
       <button id="stop" type="button" hidden>Завершить</button>
-    </div>
+    </div></div>
     <p id="error" role="alert" hidden></p>
-    <div id="transcript" aria-label="Расшифровка разговора" role="log" aria-live="polite"></div>
-    <p class="hint">Спросите «Где выпить кофе?», затем «А поближе?». Ответ — на языке вашей речи.
-      Карточки и карта обновляются после поиска.</p>
+    <p class="hint">Реплики, места и маршрут — в чате и на карте. Можно перебивать.</p>
+    <details class="privacy"><summary>Обработка голоса · Google Gemini</summary>
+      При старте звук передаётся Google Gemini. Мы не сохраняем аудио. Расшифровка остаётся
+      в истории текущего чата до перезагрузки страницы. На бесплатном тарифе Google может
+      использовать данные для улучшения моделей.</details>
   </section>
   <script type="module" src="app.mjs"></script>
 </body>
