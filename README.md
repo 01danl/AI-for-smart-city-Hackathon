@@ -18,9 +18,10 @@ RAG-помощник по прогулкам в Астане: реальные �
   <img src="https://img.shields.io/badge/FastAPI-API-009688?style=flat-square&logo=fastapi&logoColor=white" alt="FastAPI API">
   <img src="https://img.shields.io/badge/OpenRouter-LLM-0284C7?style=flat-square" alt="OpenRouter LLM">
   <img src="https://img.shields.io/badge/uv-package_manager-DE5FE9?style=flat-square" alt="Зависимости через uv">
+  <img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=flat-square&logo=docker&logoColor=white" alt="Запуск через Docker Compose">
 </p>
 
-[Скриншоты](#screenshots) · [Возможности](#features) · [Быстрый старт](#quickstart) · [Как работает](#architecture) · [API](#api) · [Документация](#docs) · [Участие](#contributing)
+[Скриншоты](#screenshots) · [Возможности](#features) · [Быстрый старт](#quickstart) · [Docker](#docker) · [Как работает](#architecture) · [API](#api) · [Документация](#docs) · [Участие](#contributing)
 
 **975 мест** &nbsp; / &nbsp; **21 категория** &nbsp; / &nbsp; **Мультиязычные ответы** &nbsp; / &nbsp; **6 готовых сценариев**
 
@@ -95,6 +96,8 @@ Nemotron через OpenRouter пишет объяснения и планы н�
 <a id="quickstart"></a>
 ## Быстрый старт
 
+### Локально через uv
+
 Нужен [uv](https://docs.astral.sh/uv/getting-started/installation/). Версия Python для проекта закреплена в [`.python-version`](.python-version); `uv` создаст окружение `.venv`.
 
 ```bash
@@ -109,6 +112,29 @@ uv run --locked streamlit run frontend/app.py --server.address 127.0.0.1 --serve
 
 > [!TIP]
 > **Сначала попробуйте без ключа.** Поиск, карточки, карта и шаблонные объяснения работают без OpenRouter. Для ответов модели добавьте ключ в `.env` и перезапустите приложение.
+
+<a id="docker"></a>
+### Через Docker Compose
+
+Нужен запущенный Docker Desktop или Docker Engine с Compose **2.24+**. Устанавливать Python и uv на компьютер не требуется.
+
+```bash
+cp -n .env.example .env
+# При необходимости добавьте OPENROUTER_API_KEY и GEMINI_API_KEY в .env.
+docker compose up --build -d --wait
+```
+
+**[Интерфейс → localhost:8501](http://localhost:8501)** · **[API → localhost:8000/docs](http://localhost:8000/docs)**
+
+Один образ запускает два независимых сервиса: Streamlit и FastAPI. Зависимости устанавливаются через uv из `uv.lock`, в образ уже включены датасет, карта и голосовой интерфейс. По умолчанию используется BM25; отзывы сохраняются в отдельном volume. `.env` исключён из контекста сборки, ключи передаются только при запуске.
+
+```bash
+docker compose ps           # состояние и healthcheck
+docker compose logs -f     # логи обоих сервисов
+docker compose down        # остановить, сохранив отзывы
+```
+
+Микрофон и геолокация работают через `localhost` с разрешения браузера. Для удалённого доступа нужен HTTPS. Порты, обновление ключей, сохранение данных и опциональная Chroma описаны в **[инструкции Docker](docs/docker.md)**.
 
 ### Подключение OpenRouter
 
