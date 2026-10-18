@@ -100,7 +100,10 @@ def handle_event(event: dict, state: dict, context: RecommendRequest) -> None:
                     "response_json": response.model_dump_json(),
                     "query": str(event.get("question") or call["args"]["query"])[:1000],
                     "turn_id": str(event.get("turn_id") or call_id)[:100],
+                    "search_details": result["response"]["used_data"],
                 }
+            except service.VoiceSearchError as exc:
+                result["response"] = {"error": str(exc)}
             except (ValidationError, ValueError, TypeError, KeyError):
                 result["response"] = {"error": "Invalid search arguments. Ask a short clarification and try again."}
             except Exception:

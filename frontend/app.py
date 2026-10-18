@@ -1378,6 +1378,15 @@ with col_chat:
                     render_live_reply(entry)
                     if not entry.get("response_json"):
                         continue
+                    with st.expander("Как понят голосовой запрос", icon=":material/hearing:"):
+                        st.write("**Для поиска:**", entry.get("search_query", entry["query"]))
+                        details = entry.get("voice_search", {})
+                        categories = details.get("filters", [])
+                        st.caption(" · ".join(filter(None, [
+                            entry["start"],
+                            f"Поиск в пределах {details['radius_m']} м" if details.get("radius_m") else "",
+                            ", ".join(category_label(category, lang) for category in categories),
+                        ])))
                 if "response_json" not in entry or "presentation" not in entry:
                     loading = st.empty()
                     loading.html(_skeleton_html())
