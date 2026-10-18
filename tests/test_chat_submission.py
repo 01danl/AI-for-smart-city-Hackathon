@@ -10,6 +10,7 @@ from streamlit.delta_generator import DeltaGenerator
 from streamlit.testing.v1 import AppTest
 
 import backend.generation as generation
+from backend.generation import recommender
 from backend.generation import RecommendResponse, UsedData
 
 
@@ -39,7 +40,7 @@ def test_first_and_followup_messages_render_before_generation(monkeypatch, geolo
 
     monkeypatch.setattr(st, "markdown", observe_markdown)
     monkeypatch.setattr(DeltaGenerator, "html", observe_html)
-    monkeypatch.setattr(generation, "generate_recommendations", fake_generate)
+    monkeypatch.setattr(recommender, "generate_recommendations", fake_generate)
     monkeypatch.setattr(streamlit_js_eval, "streamlit_js_eval", lambda **kwargs: {
         "coords": {"latitude": 51.100345, "longitude": 71.389567, "accuracy": 25},
     })

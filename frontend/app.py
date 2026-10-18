@@ -49,8 +49,8 @@ from backend.generation import (  # noqa: E402
     OFFICIAL_PRESETS,
     RecommendRequest,
     RecommendResponse,
-    generate_recommendations,
 )
+from backend.generation import recommender as generation_pipeline  # noqa: E402
 from backend.generation.prompts import build_rag_messages  # noqa: E402
 from backend.generation.localization import (  # noqa: E402
     CORE_LANGUAGES, detect_answer_language, localize_answer, prepare_search_query,
@@ -773,9 +773,9 @@ def run_recommendations(req_json: str, use_llm: bool = True) -> RecommendRespons
     _warmup_thread().join()  # reuse the background load instead of loading the model twice
     req = RecommendRequest.model_validate_json(req_json)
     if use_llm:
-        return generate_recommendations(req)
+        return generation_pipeline.generate_recommendations(req)
     # Additional languages compose the final text in the localization call, avoiding a second generation.
-    return generate_recommendations(req, use_llm=False)
+    return generation_pipeline.generate_recommendations(req, use_llm=False)
 
 
 def entry_response(entry: dict) -> RecommendResponse:
