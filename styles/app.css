@@ -1,0 +1,74 @@
+/* Experimental map styles. Existing chat styles remain in frontend/app.py. */
+.st-key-map_canvas [data-testid="stDeckGlJsonChart"] {
+    border: 1px solid #e3edf3;
+    border-radius: 16px;
+    overflow: hidden;
+    isolation: isolate;
+}
+.aw-map-summary {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 12px 0 16px;
+    color: #667085;
+    font-size: .75rem;
+}
+.aw-map-summary strong { color: #1d2433; font-size: 1rem; margin-right: 4px; }
+.aw-map-summary .msi { color: #0284c7; font-size: 20px; }
+.aw-map-summary > span { display: flex; align-items: center; gap: 4px; }
+.aw-map-empty {
+    text-align: center;
+    color: #667085;
+    font-size: .8rem;
+    padding: 16px;
+    border: 1px dashed #e3edf3;
+    border-radius: 12px;
+}
+.aw-map-empty .msi { font-size: 24px; color: #0284c7; }
+.aw-legend {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px 12px;
+    font-size: .72rem;
+    color: #667085;
+    margin: 12px 0;
+    line-height: 1.5;
+}
+.aw-legend > span { display: inline-flex; align-items: center; }
+.aw-dot { width: 7px; height: 7px; border-radius: 50%; margin-right: 5px; background: currentColor; }
+.aw-status-confirmed_open { color: #127a4b; }
+.aw-status-likely_open { color: #946200; }
+.aw-status-unknown { color: #64748b; }
+.aw-status-likely_closed { color: #b42318; }
+.aw-tl { margin-top: 16px; padding-top: 16px; border-top: 1px solid #e3edf3; }
+.aw-tl-head { font-weight: 700; color: #1d2433; font-size: .85rem; margin-bottom: 16px; }
+.aw-tl-row { display: flex; gap: 12px; position: relative; padding: 0 0 20px; }
+.aw-tl-row:last-child { padding-bottom: 0; }
+.aw-tl-row:not(:last-child)::before {
+    content: "";
+    position: absolute;
+    left: 12px;
+    top: 28px;
+    bottom: 4px;
+    border-left: 2px solid #e0f2fe;
+}
+.aw-tl-num {
+    flex: none;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #0284c7;
+    color: white;
+    display: grid;
+    place-items: center;
+    font-size: .75rem;
+    font-weight: 700;
+    box-shadow: 0 0 0 4px #f0f9ff;
+}
+.aw-tl-num.extra { background: white; color: #0284c7; border: 2px solid #0284c7; }
+.aw-tl-name { font-weight: 600; color: #1d2433; font-size: .86rem; line-height: 1.5; }
+.aw-tl-meta { color: #667085; font-size: .74rem; line-height: 1.5; margin-top: 4px; }
+.aw-tl-status { display: inline-flex; align-items: center; font-size: .7rem; margin-top: 4px; }
+@media (prefers-reduced-motion: reduce) {
+    .st-key-map_canvas * { scroll-behavior: auto; }
+}
