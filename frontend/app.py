@@ -329,11 +329,14 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 /* Per-card rows of the latest answer and their feedback buttons */
 .aw-row-card {{ margin: 0 0 0 46px; }}
 .aw-row-card .aw-card {{ margin-top: 10px; }}
-[class*="st-key-fbrow_"] {{ margin: 2px 0 0 46px; gap: 6px; align-items: center; }}
-[class*="st-key-fbrow_"] button {{ min-height: 30px; padding: 2px 12px; border-radius: 999px;
-    border: 1px solid {LINE}; background: {PANEL}; font-size: 0.85rem; }}
-[class*="st-key-fbrow_"] button:hover {{ border-color: {ACCENT}; }}
+[class*="st-key-fbrow_"] {{ margin: 2px 0 0 46px; gap: 4px; align-items: center; }}
+[class*="st-key-fbrow_"] button {{ width: 34px; min-width: 34px; height: 32px; padding: 0;
+    border: 1px solid transparent; background: transparent; color: {SUBTLE}; border-radius: 8px; }}
+[class*="st-key-fbrow_"] button:hover {{ border-color: {LINE}; background: {PANEL}; color: {MUTED}; }}
+[class*="st-key-fbrow_"] button[aria-expanded="true"] {{ color: {ACCENT}; }}
+[class*="st-key-fbrow_"] .stButton button p {{ display: none; }}
 [class*="st-key-fbrow_"] [data-testid="stCaptionContainer"] {{ margin: 0; }}
+.aw-user-meta .msi {{ font-size: 14px; margin-right: 3px; vertical-align: -2px; }}
 .aw-warn {{ font-size: 0.78rem; color: #946200; background: #FDF3DC; border-radius: 8px;
             padding: 5px 9px; margin-top: 6px; }}
 
@@ -827,15 +830,15 @@ def render_user(entry: dict, req: RecommendRequest) -> None:
         extras.append(t("meta_people", lang, n=req.group_size))
     if req.weather != "normal":
         extras.append(weather_label(req.weather, lang).lower())
-    meta = " · ".join([f"📍 {escape(entry['start'])}", t("meta_radius", lang, km=km), *extras])
+    meta = " · ".join([f"<span class='msi'>location_on</span> {escape(entry['start'])}", t("meta_radius", lang, km=km), *extras])
     if entry.get("via") == "voice":
-        meta = f"🎙 {t('meta_voice', lang)} · {meta}"
+        meta = f"<span class='msi'>mic</span> {t('meta_voice', lang)} · {meta}"
     _html(f"""
         <div class="aw-row user">
             <div class="aw-bubble user">
                 {escape(entry['query'])}
                 <div class="aw-user-meta">{meta}</div>
-                <div class="aw-time">{_hhmm(req)} ✓✓</div>
+                <div class="aw-time">{_hhmm(req)}</div>
             </div>
             <div class="aw-user-badge">{t("you", L())}</div>
         </div>
@@ -955,16 +958,17 @@ def vote(entry_key: str, poi_id: str, value: str, reason: str | None = None) -> 
 
 
 def render_feedback(entry_key: str, rec) -> None:
-    """👍 / 👎 row under a card of the latest answer."""
+    """Gray thumb up/down row under a card of the latest answer (ChatGPT-style)."""
     lang = L()
     voted = st.session_state.get("voted", {}).get(f"{entry_key}:{rec.poi_id}")
     with st.container(key=f"fbrow_{entry_key}_{rec.poi_id}", horizontal=True):
         if voted:
-            st.caption(("👍 " if voted == "up" else "👎 ") + t("fb_thanks", lang))
+            st.caption(t("fb_thanks", lang))
             return
-        st.button("👍", key=f"fb_up_{entry_key}_{rec.poi_id}", help=t("fb_up", lang),
-                  on_click=vote, args=(entry_key, rec.poi_id, "up"))
-        with st.popover("👎", help=t("fb_down", lang), key=f"fb_dnpop_{entry_key}_{rec.poi_id}"):
+        st.button("", key=f"fb_up_{entry_key}_{rec.poi_id}", icon=":material/thumb_up:",
+                  help=t("fb_up", lang), on_click=vote, args=(entry_key, rec.poi_id, "up"))
+        with st.popover("", icon=":material/thumb_down:", help=t("fb_down", lang),
+                        key=f"fb_dnpop_{entry_key}_{rec.poi_id}"):
             for reason in _feedback.REASONS:
                 st.button(t(f"fb_reason_{reason}", lang), key=f"fb_dn_{reason}_{entry_key}_{rec.poi_id}",
                           on_click=vote, args=(entry_key, rec.poi_id, "down", reason), use_container_width=True)
@@ -994,14 +998,14 @@ def render_answer(req: RecommendRequest, resp: RecommendResponse, latest: bool, 
         <div class="aw-row">
             <div class="aw-bot-badge">AW</div>
             <div class="aw-answer">
-                <div class="aw-bubble">{intro}<div class="aw-time">{_hhmm(req)} ✓✓</div></div>
+                <div class="aw-bubble">{intro}<div class="aw-time">{_hhmm(req)}</div></div>
                 <div class="aw-context">{_context_chips(u)}</div>
                 {cards}
             </div>
         </div>
         """)
     if latest:
-        # Each card is its own block so real 👍 / 👎 buttons can sit under it.
+        # Each card is its own block so real thumb up/down buttons can sit under it.
         for i, rec in enumerate(resp.recommendations, start=1):
             _html(f'<div class="aw-row aw-row-card"><div class="aw-answer">{_card_html(i, rec, closed(rec))}</div></div>')
             render_feedback(entry_key, rec)
