@@ -778,6 +778,13 @@ def run_recommendations(req_json: str, use_llm: bool = True) -> RecommendRespons
     return generation_pipeline.generate_recommendations(req, use_llm=False)
 
 
+def retry_translation(entry: dict) -> None:
+    """Retry a failed translation without regenerating an already completed search."""
+    entry.pop("presentation", None)
+    if not entry.get("query_translation_ok", True):
+        entry.pop("response_json", None)
+
+
 def entry_response(entry: dict) -> RecommendResponse:
     """Cache the canonical answer and its localized display copy per message."""
     req = RecommendRequest.model_validate_json(entry["req_json"])
@@ -1437,6 +1444,10 @@ with col_chat:
                     loading.empty()
                 else:
                     resp = entry_response(entry)
+                if (entry["presentation"]["requested_language"] != entry["presentation"]["language"]
+                        or not entry.get("query_translation_ok", True)):
+                    st.button(t("retry_translation", lang), key=f"retry_translation_{convo['id']}_{i}",
+                              on_click=retry_translation, args=(entry,))
                 with answer_context(entry["presentation"]):
                     if entry["presentation"]["note"]:
                         st.caption(entry["presentation"]["note"])

@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 from types import SimpleNamespace
+import importlib.util
+import sys
 
 import pytest
 
@@ -24,9 +26,10 @@ def test_openrouter_configuration_and_chat_call(monkeypatch):
 
     seen: dict = {}
 
-    def fake_openai(*, api_key: str, base_url: str):
+    def fake_openai(*, api_key: str, base_url: str, max_retries=None):
         seen["api_key"] = api_key
         seen["base_url"] = base_url
+        seen["max_retries"] = max_retries
 
         def create(**kwargs):
             seen["request"] = kwargs
@@ -48,6 +51,45 @@ def test_openrouter_configuration_and_chat_call(monkeypatch):
     assert client.complete(messages, timeout=25, max_tokens=6000) == "ok"
     assert seen["request"]["timeout"] == 25
     assert seen["request"]["max_tokens"] == 6000
+    assert client.complete(messages, json_mode=True, reasoning=False, max_retries=0) == "ok"
+    assert seen["request"]["response_format"] == {"type": "json_object"}
+    assert seen["request"]["extra_body"] == {"reasoning": {"enabled": False}}
+    assert seen["max_retries"] == 0
+
+
+def test_truncated_response_is_reported_before_json_parsing(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_MODEL", "test-model")
+    result = SimpleNamespace(choices=[SimpleNamespace(
+        finish_reason="length", message=SimpleNamespace(content='{"texts":{'),
+    )])
+    monkeypatch.setattr(client, "get_client", lambda: SimpleNamespace(chat=SimpleNamespace(
+        completions=SimpleNamespace(create=lambda **kwargs: result),
+    )))
+    with pytest.raises(RuntimeError, match="truncated"):
+        client.complete([{"role": "user", "content": "test"}])
+
+
+def test_http_fallback_sends_reasoning_at_top_level(monkeypatch):
+    monkeypatch.setitem(sys.modules, "openai", None)
+    spec = importlib.util.spec_from_file_location("http_fallback_test_client", client.__file__)
+    fallback = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(fallback)
+    monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
+    monkeypatch.setenv("OPENROUTER_MODEL", "test-model")
+    seen = {}
+
+    def post(url, **kwargs):
+        seen.update(kwargs)
+        return SimpleNamespace(raise_for_status=lambda: None, json=lambda: {
+            "choices": [{"finish_reason": "stop", "message": {"content": "{}"}}],
+        })
+
+    monkeypatch.setattr(fallback.requests, "post", post)
+    assert fallback.complete([], timeout=3, json_mode=True, reasoning=False, max_retries=0) == "{}"
+    assert seen["json"]["reasoning"] == {"enabled": False}
+    assert seen["json"]["response_format"] == {"type": "json_object"}
+    assert "extra_body" not in seen["json"] and "timeout" not in seen["json"]
+    assert seen["timeout"] == 3
 
 
 def test_missing_key_fails_before_request(monkeypatch):

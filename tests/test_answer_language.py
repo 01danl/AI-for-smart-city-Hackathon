@@ -18,6 +18,7 @@ from frontend import i18n
 @pytest.fixture(autouse=True)
 def no_network(monkeypatch):
     monkeypatch.setenv("OPENROUTER_API_KEY", "")
+    localization._LABEL_CACHE.clear()
 
 
 @pytest.mark.parametrize("query,language", [
@@ -77,7 +78,7 @@ def test_localization_only_changes_display_text(monkeypatch):
     assert "51.1189" not in seen[0] and "71.4691" not in seen[0]
     assert "51.128" not in seen[0] and "71.431" not in seen[0]
     with i18n.answer_context(presentation):
-        assert i18n.t("card_away", "zh", d=375).startswith("中文 ")
+        assert "米" in i18n.t("card_away", "zh", d=375)
         assert "375" in i18n.t("card_away", "zh", d=375)
     assert i18n.current_answer_language() is None
     assert i18n.t("new_chat", "ru") == "Новый чат"
@@ -125,6 +126,91 @@ def test_core_languages_do_not_request_a_second_translation(monkeypatch):
     monkeypatch.setattr(localization, "_json_call", unexpected)
     for language in ("ru", "kk", "en"):
         assert localization.localize_answer(response(), language, {})["language"] == language
+
+
+def test_chinese_labels_are_complete_and_keep_numbers_and_placeholders():
+    source = i18n.answer_dictionary()
+    translated = localization._chinese_labels()
+    assert set(source) == set(translated)
+    assert all(localization._safe_translation(value, translated[key]) for key, value in source.items())
+
+
+def test_common_chinese_question_needs_no_preliminary_model_call(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "fake-key")
+    monkeypatch.setattr(localization, "_json_call", lambda *args: pytest.fail("Extra translation call"))
+    assert localization.prepare_search_query("附近有什么？", "zh") == ("What is nearby?", True)
+
+
+def test_chinese_does_not_send_fixed_labels_to_the_model(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "fake-key")
+    seen = []
+
+    def translate(instruction, payload):
+        seen.append(payload)
+        return fake_chinese(instruction, payload)
+
+    monkeypatch.setattr(localization, "_json_call", translate)
+    result = localization.localize_answer(response(), "zh", i18n.answer_dictionary())
+    assert result["language"] == "zh"
+    assert not any(key.startswith("label:") for key in seen[0]["texts"])
+
+
+def test_other_label_translations_are_reused_without_caching_poi_texts(monkeypatch):
+    monkeypatch.setenv("OPENROUTER_API_KEY", "fake-key")
+    seen = []
+
+    def translate(instruction, payload):
+        seen.append(payload)
+        return {"texts": {key: "FR " + value for key, value in payload["texts"].items()}, "names": {}}
+
+    monkeypatch.setattr(localization, "_json_call", translate)
+    for _ in range(2):
+        assert localization.localize_answer(response(), "fr", i18n.answer_dictionary())["language"] == "fr"
+    assert any(key.startswith("label:") for key in seen[0]["texts"])
+    assert not any(key.startswith("label:") for key in seen[1]["texts"])
+    assert "rec:0:why" in seen[1]["texts"]
+
+
+def test_short_query_translation_uses_json_and_has_no_hidden_retries(monkeypatch):
+    seen = {}
+
+    def complete(messages, **kwargs):
+        seen.update(kwargs)
+        return '{"query":"A cafe nearby"}'
+
+    monkeypatch.setattr(localization, "complete", complete)
+    assert localization._json_call("Translate", {"query": "咖啡馆"}) == {"query": "A cafe nearby"}
+    assert seen == {"timeout": 25, "max_tokens": 256, "json_mode": True,
+                    "reasoning": False, "max_retries": 0}
+
+
+def test_failed_translation_can_be_retried_without_repeating_generation(monkeypatch):
+    st.cache_data.clear()
+    generations = []
+    translations = []
+
+    def generate(req, **kwargs):
+        generations.append(req)
+        return RecommendResponse(used_data=UsedData(), recommendations=[], disclaimer="No results.")
+
+    def translate(resp, language, labels):
+        translations.append(language)
+        succeeded = len(translations) > 1
+        return {"language": language if succeeded else "en", "requested_language": language,
+                "labels": {}, "note": "" if succeeded else "Translation failed",
+                "response_json": resp.model_dump_json()}
+
+    monkeypatch.setattr(recommender, "generate_recommendations", generate)
+    monkeypatch.setattr(localization, "localize_answer", translate)
+    app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "frontend/app.py"),
+                            default_timeout=30).run()
+    app.chat_input[0].set_value("附近有什么？").run()
+    assert not app.exception
+    app.button(key="retry_translation_1_0").click().run()
+    assert not app.exception
+    assert len(generations) == 1 and translations == ["zh", "zh"]
+    assert app.session_state.convos[0]["entries"][0]["presentation"]["language"] == "zh"
+    st.cache_data.clear()
 
 
 @pytest.mark.parametrize("language,phrase", [("en", "No matching places"), ("kk", "сәйкес орындар")])
