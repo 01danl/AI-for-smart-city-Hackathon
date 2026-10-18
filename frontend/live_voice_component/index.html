@@ -1,0 +1,28 @@
+<!doctype html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Голосовой помощник Astana Walk</title>
+  <link rel="stylesheet" href="voice.css">
+</head>
+<body>
+  <section aria-label="Голосовой помощник" id="panel">
+    <div class="heading"><span class="orb" aria-hidden="true">AW</span><div>
+      <strong>Голосовой помощник</strong><div id="status" role="status" aria-live="polite">Можно говорить и перебивать</div>
+    </div></div>
+    <p class="privacy">При старте звук передаётся Google Gemini. Мы не сохраняем аудио.
+      На бесплатном тарифе Google может использовать данные для улучшения моделей.</p>
+    <div class="controls">
+      <button id="start" type="button">Начать разговор</button>
+      <button id="mute" type="button" hidden aria-pressed="false">Выключить микрофон</button>
+      <button id="stop" type="button" hidden>Завершить</button>
+    </div>
+    <p id="error" role="alert" hidden></p>
+    <div id="transcript" aria-label="Расшифровка разговора" role="log" aria-live="polite"></div>
+    <p class="hint">Спросите «Где выпить кофе?», затем «А поближе?». Ответ — на языке вашей речи.
+      Карточки и карта обновляются после поиска.</p>
+  </section>
+  <script type="module" src="app.mjs"></script>
+</body>
+</html>
