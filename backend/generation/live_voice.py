@@ -15,8 +15,8 @@ from unidecode import unidecode
 from backend.generation.client import ROOT
 from backend.generation import recommender
 from backend.retrieval.geo import round_coords
-from backend.retrieval.intent import parse_query_intent
 from backend.retrieval.text import CATEGORY_WORDS
+from .proximity import search_categories, search_radii
 
 DEFAULT_LIVE_MODEL = "gemini-3.8-live"
 TOKEN_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/auth_tokens"
@@ -163,18 +163,7 @@ def create_grant() -> dict:
 
 
 def _search_categories(args: PlaceSearch, context: recommender.RecommendRequest) -> list[str] | None:
-    categories = args.categories or parse_query_intent(args.query).inferred_categories or None
-    if not categories:
-        # Compatibility with existing Live sessions that still send English tool queries.
-        for pattern, inferred in (
-            (r"\brestaurants?\b|ресторан", ["restaurant"]),
-            (r"\bcaf[eé]s?\b|\bcoffee\b", ["cafe"]),
-            (r"\b(?:eat|eating|food|meal|lunch|dinner)\b|поесть|покушать|где поедим", ["restaurant", "cafe", "fast_food"]),
-            (r"\bparks?\b", ["park"]),
-        ):
-            if re.search(pattern, args.query, re.IGNORECASE):
-                categories = inferred
-                break
+    categories = search_categories(args.query, args.categories)
     if context.categories:
         if categories:
             categories = [category for category in categories if category in context.categories]
@@ -202,13 +191,13 @@ def search_places(arguments: dict, context: recommender.RecommendRequest) -> tup
     })
     # A lexical/name boost must not pull a generic nearby request across the district.
     # Search expanding local rings; exact venues and specialized requests retain relevance ranking.
-    radii = sorted({min(radius, limit) for radius in (300, 600, 1000, 2000, 5000, 10000, limit)})
+    radii = search_radii(limit)
     if args.sort_by == "relevance":
         radii = [limit]
     closest_closed = None
     for radius in radii:
         req = req.model_copy(update={"max_distance_m": radius})
-        response = recommender.generate_recommendations(req, use_llm=False)
+        response = recommender.generate_recommendations(req, use_llm=False, prefer_nearby=False)
         if response.recommendations:
             if any(item.open_status != "likely_closed" for item in response.recommendations):
                 break

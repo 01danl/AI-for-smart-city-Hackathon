@@ -83,7 +83,7 @@ def test_model_cannot_override_location_or_widen_radius(monkeypatch, context):
     assert all(request.max_distance_m <= 2000 for request, _ in seen)
     assert not req.auto_anchor
     assert (req.lat, req.lon) == (51.128, 71.431)
-    assert options == {"use_llm": False}
+    assert options == {"use_llm": False, "prefer_nearby": False}
 
 
 def test_no_results_does_not_invent_places(context):
