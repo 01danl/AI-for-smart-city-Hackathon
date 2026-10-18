@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import os
+import re
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 import requests
 from dotenv import load_dotenv
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, field_validator
 from unidecode import unidecode
 
 from backend.generation.client import ROOT
 from backend.generation import recommender
 from backend.retrieval.geo import round_coords
+from backend.retrieval.intent import parse_query_intent
+from backend.retrieval.text import CATEGORY_WORDS
 
 DEFAULT_LIVE_MODEL = "gemini-3.8-live"
 TOKEN_ENDPOINT = "https://generativelanguage.googleapis.com/v1beta/auth_tokens"
@@ -28,8 +32,16 @@ walking route MUST call search_places, even if you remember earlier results.
 This tool updates the user's visible cards and map. Do not merely describe a route
 from memory. For route requests include 'walking route' and the time budget in query.
 Before recommending or making factual claims about places, call search_places.
-Translate the search into a standalone English query, preserving place names,
-preferences, weather and time budget. Never invent POIs, hours, prices or amenities.
+Translate search intent into a short standalone RUSSIAN query; the local dataset and
+intent parser are richest in Russian. Keep speaking the user's language, independently.
+Preserve preferences, weather and time budget. Set categories explicitly: coffee ->
+[cafe], a meal -> [restaurant,cafe,fast_food], a restaurant specifically -> [restaurant].
+Speaking Chinese does NOT mean Chinese cuisine. Do not infer a cuisine from language.
+Use sort_by=nearby for generic 'near me', 'closer', coffee/food/walk queries. Use
+sort_by=relevance for an explicitly named venue or a special requirement that outweighs
+walking distance. Never insert a venue name merely because it sounds suitable.
+The tool searches nearby first and does not expand beyond the user radius. If nothing
+matches, say so; ask before suggesting a farther search. Never invent POIs or hours.
 Use only the returned places. Say approximate meters from the start, walking minutes,
 why and an activity. Default to one best place, offer more if asked (at most three).
 Keep spoken replies under 50 words (100 Chinese characters). Do not read lists of
@@ -54,8 +66,12 @@ SEARCH_TOOL = {
         "parameters": {
             "type": "OBJECT",
             "properties": {
-                "query": {"type": "STRING", "description": "Standalone English search, resolving follow-up context; no GPS coordinates."},
+                "query": {"type": "STRING", "description": "Concise Russian search intent, resolving follow-ups; preserve requested venue names and constraints, no GPS."},
                 "radius_m": {"type": "INTEGER", "description": "Optional narrower radius in meters; cannot expand beyond the user's setting."},
+                "categories": {"type": "ARRAY", "items": {"type": "STRING", "enum": list(CATEGORY_WORDS)},
+                               "description": "Requested POI types, independent of spoken language; omit for a mixed sightseeing walk."},
+                "sort_by": {"type": "STRING", "enum": ["nearby", "relevance"],
+                            "description": "nearby by default; relevance only for explicit venue names or specialized preferences."},
             },
             "required": ["query"],
         },
@@ -67,10 +83,23 @@ class LiveVoiceError(RuntimeError):
     """Safe error message for the interface; never includes provider payloads or keys."""
 
 
+class VoiceSearchError(ValueError):
+    """A safe correction for the voice model, without returning arbitrary POIs."""
+
+
 class PlaceSearch(BaseModel):
     model_config = ConfigDict(extra="forbid", strict=True)
     query: str = Field(min_length=1, max_length=1000)
     radius_m: int | None = Field(default=None, ge=100, le=20000)
+    categories: list[str] | None = Field(default=None, min_length=1, max_length=8)
+    sort_by: Literal["nearby", "relevance"] = "nearby"
+
+    @field_validator("categories")
+    @classmethod
+    def known_categories(cls, value):
+        if value and any(category not in CATEGORY_WORDS for category in value):
+            raise ValueError("Unsupported POI category")
+        return value
 
 
 def configured() -> bool:
@@ -133,18 +162,65 @@ def create_grant() -> dict:
     return {"token": token, "setup": setup, "seconds": SESSION_SECONDS}
 
 
+def _search_categories(args: PlaceSearch, context: recommender.RecommendRequest) -> list[str] | None:
+    categories = args.categories or parse_query_intent(args.query).inferred_categories or None
+    if not categories:
+        # Compatibility with existing Live sessions that still send English tool queries.
+        for pattern, inferred in (
+            (r"\brestaurants?\b|ресторан", ["restaurant"]),
+            (r"\bcaf[eé]s?\b|\bcoffee\b", ["cafe"]),
+            (r"\b(?:eat|eating|food|meal|lunch|dinner)\b|поесть|покушать|где поедим", ["restaurant", "cafe", "fast_food"]),
+            (r"\bparks?\b", ["park"]),
+        ):
+            if re.search(pattern, args.query, re.IGNORECASE):
+                categories = inferred
+                break
+    if context.categories:
+        if categories:
+            categories = [category for category in categories if category in context.categories]
+            if not categories:
+                raise ValueError("Requested categories conflict with user filters")
+        else:
+            categories = context.categories
+    return categories
+
+
 def search_places(arguments: dict, context: recommender.RecommendRequest) -> tuple[dict, recommender.RecommendResponse]:
     """Run existing deterministic RAG. Model arguments cannot change GPS or user filters."""
     args = PlaceSearch.model_validate(arguments)
     if not args.query.strip():
         raise ValueError("Empty search query")
+    if (not re.search(r"[a-zа-яёәіңғүұқөһ]", args.query, re.IGNORECASE)
+            or re.search(r"[\u3400-\u9fff\u3040-\u30ff\uac00-\ud7af\u0600-\u06ff]", args.query)):
+        raise VoiceSearchError("Translate the full search intent into concise Russian and call search_places again. Do not infer cuisine from the spoken language.")
     lat, lon = round_coords(context.lat, context.lon)
+    limit = min(args.radius_m or context.max_distance_m, context.max_distance_m)
     req = context.model_copy(update={
         "query": args.query.strip(), "lat": lat, "lon": lon,
-        "auto_anchor": False,
-        "max_distance_m": min(args.radius_m or context.max_distance_m, context.max_distance_m),
+        "auto_anchor": False, "categories": _search_categories(args, context),
+        "max_distance_m": limit,
     })
-    response = recommender.generate_recommendations(req, use_llm=False)
+    # A lexical/name boost must not pull a generic nearby request across the district.
+    # Search expanding local rings; exact venues and specialized requests retain relevance ranking.
+    radii = sorted({min(radius, limit) for radius in (300, 600, 1000, 2000, 5000, 10000, limit)})
+    if args.sort_by == "relevance":
+        radii = [limit]
+    closest_closed = None
+    for radius in radii:
+        req = req.model_copy(update={"max_distance_m": radius})
+        response = recommender.generate_recommendations(req, use_llm=False)
+        if response.recommendations:
+            if any(item.open_status != "likely_closed" for item in response.recommendations):
+                break
+            if closest_closed is None:
+                closest_closed = (req, response)
+    else:
+        if closest_closed is not None:
+            req, response = closest_closed
+    if args.sort_by == "nearby":
+        response = response.model_copy(update={
+            "recommendations": sorted(response.recommendations, key=lambda item: item.distance_m),
+        })
     # Explicit allowlist: neither the origin nor POI coordinates reach the voice model.
     fields = {"poi_id", "name", "category", "distance_m", "walk_min", "visit_min",
               "why", "what_to_do", "open_status", "confidence_note", "source", "facts_poi_data"}
@@ -165,7 +241,7 @@ def search_places(arguments: dict, context: recommender.RecommendRequest) -> tup
         } if response.route else None),
         "used_data": {"location": "rounded_100m", "filters": response.used_data.filters,
                       "tags": response.used_data.tags, "radius_m": req.max_distance_m,
-                      "checked_at": req.now_iso},
+                      "requested_radius_m": limit, "sort_by": args.sort_by, "checked_at": req.now_iso},
         "disclaimer": response.disclaimer,
         "distance_note": "Approximate distance from start, not a verified street route.",
     }, response

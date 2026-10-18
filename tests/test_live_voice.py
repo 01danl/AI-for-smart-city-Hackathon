@@ -80,7 +80,8 @@ def test_model_cannot_override_location_or_widen_radius(monkeypatch, context):
     monkeypatch.setattr(voice.recommender, "generate_recommendations", generate)
     voice.search_places({"query": "cafe near Mega Silk Way", "radius_m": 20000}, context)
     req, options = seen[0]
-    assert req.max_distance_m == 2000 and not req.auto_anchor
+    assert all(request.max_distance_m <= 2000 for request, _ in seen)
+    assert not req.auto_anchor
     assert (req.lat, req.lon) == (51.128, 71.431)
     assert options == {"use_llm": False}
 
@@ -88,3 +89,47 @@ def test_model_cannot_override_location_or_widen_radius(monkeypatch, context):
 def test_no_results_does_not_invent_places(context):
     payload, response = voice.search_places({"query": "coffee"}, context.model_copy(update={"lat": 0, "lon": 0}))
     assert payload["places"] == [] and response.recommendations == []
+
+
+@pytest.mark.parametrize("query", ["кофе рядом", "coffee nearby", "nearest cafe"])
+def test_generic_coffee_search_does_not_favor_distant_coffee_brand_names(query):
+    context = RecommendRequest(query="voice", lat=51.089, lon=71.407, max_distance_m=2000,
+                               now_iso="2026-10-18T16:00")
+    payload, response = voice.search_places({"query": query}, context)
+    assert response.recommendations
+    assert all(item.category == "cafe" and item.distance_m <= 300 for item in response.recommendations)
+    assert response.recommendations[0].distance_m < 100
+    assert payload["used_data"]["radius_m"] == 300
+    assert payload["used_data"]["requested_radius_m"] == 2000
+    distances = [item.distance_m for item in response.recommendations]
+    assert distances == sorted(distances)
+
+
+def test_food_query_does_not_return_bars_or_malls():
+    _, response = voice.search_places({"query": "food nearby"}, RecommendRequest(
+        query="voice", lat=51.089, lon=71.407, now_iso="2026-10-18T16:00"))
+    assert response.recommendations
+    assert all(item.category in {"cafe", "restaurant", "fast_food"} for item in response.recommendations)
+
+
+def test_relevance_search_respects_explicit_venue_name(context):
+    _, response = voice.search_places({"query": "Master Coffee", "categories": ["cafe"], "sort_by": "relevance"}, context)
+    assert response.recommendations[0].name == "Master Coffee"
+    assert response.recommendations[0].distance_m > 300
+
+
+def test_sparse_category_expands_locally_within_limit(context):
+    payload, response = voice.search_places({"query": "музей", "categories": ["museum"]}, context)
+    assert payload["used_data"]["radius_m"] <= context.max_distance_m
+    assert all(item.category == "museum" and item.distance_m <= context.max_distance_m for item in response.recommendations)
+
+
+def test_tool_category_cannot_override_explicit_user_filter(context):
+    with pytest.raises(ValueError, match="conflict"):
+        voice.search_places({"query": "restaurant", "categories": ["restaurant"]},
+                            context.model_copy(update={"categories": ["museum"]}))
+
+
+def test_untranslated_chinese_is_not_treated_as_a_generic_poi_search(context):
+    with pytest.raises(voice.VoiceSearchError, match="Translate"):
+        voice.search_places({"query": "附近有什么咖啡店？"}, context)

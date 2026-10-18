@@ -3,6 +3,7 @@
 from pathlib import Path
 from unittest.mock import Mock
 from html import unescape
+import json
 
 from streamlit.testing.v1 import AppTest
 
@@ -47,7 +48,7 @@ def test_live_transcript_search_and_map_render_in_normal_chat(monkeypatch):
     assert all(rec.name in unescape(html) for rec in response.recommendations), [r.name for r in response.recommendations]
     assert "aw-tl-row" in html  # The regular route timeline is rendered beside the map.
     charts = app.get("deck_gl_json_chart")
-    assert charts and response.recommendations[0].name in charts[0].proto.json
+    assert charts and response.recommendations[0].name in json.dumps(json.loads(charts[0].proto.json), ensure_ascii=False)
     assert generate.call_count == 1
     assert len(set(component_keys)) == 1  # Creating a chat cannot remount the live microphone iframe.
     revision = app.session_state.map_view_revision
