@@ -7,8 +7,33 @@ too, so the Kazakh and English scenarios ask in that language.
 
 from __future__ import annotations
 
+from contextlib import contextmanager
+from contextvars import ContextVar
+
+_ANSWER_LOCALE: ContextVar[dict | None] = ContextVar("answer_locale", default=None)
+
+
+@contextmanager
+def answer_context(presentation: dict):
+    """Scope answer language to one message, without changing the interface or other sessions."""
+    token = _ANSWER_LOCALE.set(presentation)
+    try:
+        yield
+    finally:
+        _ANSWER_LOCALE.reset(token)
+
+
+def current_answer_language() -> str | None:
+    current = _ANSWER_LOCALE.get()
+    return current.get("language") if current else None
+
+
+def _answer_label(key: str, lang: str | None) -> str | None:
+    current = _ANSWER_LOCALE.get()
+    return current.get("labels", {}).get(key) if current and current.get("language") == lang else None
+
 LANGS = ("ru", "kk", "en")
-LANG_SHORT = {"ru": "РУС", "kk": "ҚАЗ", "en": "ENG"}
+LANG_SHORT = {"ru": "RU", "kk": "KZ", "en": "EN"}
 
 TEXT: dict[str, dict[str, str]] = {
     # Header
@@ -35,6 +60,11 @@ TEXT: dict[str, dict[str, str]] = {
     "logo_alt": {"ru": "AstanaWalk.ai — прогулки по Астане", "kk": "AstanaWalk.ai — Астана бойынша серуен",
                  "en": "AstanaWalk.ai — walks in Astana"},
     "language": {"ru": "Язык", "kk": "Тіл", "en": "Language"},
+    "interface_language": {"ru": "Язык интерфейса", "kk": "Интерфейс тілі", "en": "Interface language"},
+    "answer_language_auto": {
+        "ru": "Ответы — на языке вашего сообщения.",
+        "kk": "Жауаптар хабарламаңыздың тілінде беріледі.",
+        "en": "Answers follow the language of your message."},
     "new_chat": {"ru": "Новый чат", "kk": "Жаңа чат", "en": "New chat"},
     "new_chat_help": {"ru": "Начать новый разговор; прошлые чаты останутся в истории ниже",
                       "kk": "Жаңа әңгіме бастау; бұрынғы чаттар төмендегі тарихта қалады",
@@ -104,6 +134,8 @@ TEXT: dict[str, dict[str, str]] = {
     "facts_summary": {"ru": "Факты из базы и что добавил ИИ", "kk": "Базадағы фактілер және ЖИ қосқаны",
                       "en": "Database facts and what the AI added"},
     "facts": {"ru": "Факты [poi_data]:", "kk": "Фактілер [poi_data]:", "en": "Facts [poi_data]:"},
+    "original_name": {"ru": "Название в источнике:", "kk": "Дереккөздегі атауы:", "en": "Name in source:"},
+    "meters": {"ru": "м", "kk": "м", "en": "m"},
     "boundary": {"ru": "Граница фактов и генерации:", "kk": "Фактілер мен генерацияның шекарасы:",
                  "en": "Facts vs generated text:"},
     "visit_source": {"ru": "Источник: Visit Astana", "kk": "Дереккөз: Visit Astana", "en": "Source: Visit Astana"},
@@ -431,31 +463,34 @@ def norm_lang(lang: str | None) -> str:
 def t(key: str, lang: str | None, **values) -> str:
     """Text for `key` in `lang` (Russian fallback), with `{placeholders}` filled in."""
     entry = TEXT[key]
-    text = entry.get(norm_lang(lang)) or entry["ru"]
+    text = _answer_label("text:" + key, lang) or entry.get(lang) or entry["en" if _ANSWER_LOCALE.get() else "ru"]
     return text.format(**values) if values else text
 
 
-def _pick(table: dict[str, dict], key: str, lang: str | None, default):
+def _pick(table: dict[str, dict], key: str, lang: str | None, default, group: str = ""):
+    localized = _answer_label(group + ":" + key, lang)
+    if localized:
+        return localized
     entry = table.get(key)
     if not entry:
         return default
-    return entry.get(norm_lang(lang)) or entry.get("ru", default)
+    return entry.get(lang) or entry.get("en" if _ANSWER_LOCALE.get() else "ru", default)
 
 
 def status_label(status: str, lang: str | None) -> str:
-    return _pick(STATUS_LABEL, status, lang, None) or _pick(STATUS_LABEL, "unknown", lang, status)
+    return _pick(STATUS_LABEL, status, lang, None, "status") or _pick(STATUS_LABEL, "unknown", lang, status, "status")
 
 
 def source_label(source: str, lang: str | None) -> str:
-    return _pick(SOURCE_LABEL, source, lang, None) or _pick(SOURCE_LABEL, "poi_data", lang, source)
+    return _pick(SOURCE_LABEL, source, lang, None, "source") or _pick(SOURCE_LABEL, "poi_data", lang, source, "source")
 
 
 def category_label(category: str, lang: str | None) -> str:
-    return _pick(CATEGORY, category, lang, category)
+    return _pick(CATEGORY, category, lang, category, "category")
 
 
 def event_kind_label(kind: str, lang: str | None) -> str:
-    return _pick(EVENT_KIND, kind, lang, kind)
+    return _pick(EVENT_KIND, kind, lang, kind, "event")
 
 
 def duration_text(minutes: int, lang: str | None) -> str:
@@ -466,7 +501,7 @@ def duration_text(minutes: int, lang: str | None) -> str:
 
 
 def weather_label(weather: str, lang: str | None) -> str:
-    return _pick(WEATHER, weather, lang, weather)
+    return _pick(WEATHER, weather, lang, weather, "weather")
 
 
 def landmark_name(key: str, lang: str | None) -> str:
@@ -492,3 +527,17 @@ def geo_error(code: object, lang: str | None, russian: str) -> str:
         return russian
     hint = GEO_ERRORS.get(str(code), {}).get(lang) or GEO_GENERIC[lang]
     return hint + GEO_RETRY[lang]
+
+
+def answer_dictionary() -> dict[str, str]:
+    """English templates to translate for additional answer languages; numbers stay in Python."""
+    prefixes = ("card_", "found_", "chip_", "map_", "route_", "stop_", "dur_", "fb_", "share_", "ev_")
+    keys = {"why", "what", "nothing_found", "about_data", "facts_summary", "facts", "boundary",
+            "link_walk", "link_2gis", "visit_source", "received", "min", "meters", "how_it_works",
+            "original_name", "mode_llm"}
+    values = {"text:" + key: entry["en"] for key, entry in TEXT.items()
+              if key.startswith(prefixes) or key in keys}
+    for prefix, table in (("status", STATUS_LABEL), ("source", SOURCE_LABEL), ("category", CATEGORY),
+                          ("weather", WEATHER), ("event", EVENT_KIND)):
+        values.update({prefix + ":" + key: entry["en"] for key, entry in table.items()})
+    return values

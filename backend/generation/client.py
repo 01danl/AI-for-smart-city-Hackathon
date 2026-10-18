@@ -23,6 +23,7 @@ except ImportError:
             self._base_url = base_url.rstrip("/")
 
         def create(self, *, model: str, messages: list[dict[str, str]], **kwargs: Any) -> Any:
+            timeout = kwargs.pop("timeout", 35)
             resp = requests.post(
                 f"{self._base_url}/chat/completions",
                 headers={
@@ -30,7 +31,7 @@ except ImportError:
                     "Content-Type": "application/json",
                 },
                 json={"model": model, "messages": messages, **kwargs},
-                timeout=35,
+                timeout=timeout,
             )
             resp.raise_for_status()
             data = resp.json()
@@ -63,15 +64,24 @@ def get_client() -> OpenAI:
     return OpenAI(api_key=api_key, base_url=base_url)
 
 
-def complete(messages: list[dict[str, str]], *, model: str | None = None) -> str:
+def complete(
+    messages: list[dict[str, str]], *, model: str | None = None,
+    timeout: float | None = None, max_tokens: int | None = None,
+) -> str:
     """Send chat messages through OpenRouter and return the text response."""
     load_dotenv(ROOT / ".env")
     selected_model = model or os.getenv("OPENROUTER_MODEL")
     if not selected_model:
         raise RuntimeError("OPENROUTER_MODEL is required for generation")
+    options = {}
+    if timeout is not None:
+        options["timeout"] = timeout
+    if max_tokens is not None:
+        options["max_tokens"] = max_tokens
     response = get_client().chat.completions.create(
         model=selected_model,
         messages=messages,
+        **options,
     )
     content = response.choices[0].message.content if response.choices else None
     if not content:

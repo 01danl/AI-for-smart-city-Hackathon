@@ -52,6 +52,9 @@ from backend.generation import (  # noqa: E402
     generate_recommendations,
 )
 from backend.generation.prompts import build_rag_messages  # noqa: E402
+from backend.generation.localization import (  # noqa: E402
+    CORE_LANGUAGES, detect_answer_language, localize_answer, prepare_search_query,
+)
 from backend.generation.voice import has_server_asr as _server_asr_ready  # noqa: E402
 from backend.generation.voice import transcribe_b64_wav as _server_transcribe  # noqa: E402
 from backend.retrieval import BACKEND, parse_query_intent, retrieve  # noqa: E402
@@ -66,6 +69,9 @@ from frontend.share import Stop, maps_route_url, qr_svg, share_text, telegram_ur
 from frontend.i18n import (  # noqa: E402
     LANG_SHORT,
     LANGS,
+    answer_context,
+    answer_dictionary,
+    current_answer_language,
     category_label,
     duration_text,
     event_kind_label,
@@ -446,8 +452,8 @@ st.html(CSS)
 
 
 def L() -> str:
-    """Current interface language; it is also the answer and speech language."""
-    return norm_lang(st.session_state.get("lang"))
+    """Use a message's language while rendering it, otherwise the interface language."""
+    return current_answer_language() or norm_lang(st.session_state.get("lang"))
 
 
 def _status(status: str) -> tuple[str, str, str]:
@@ -462,9 +468,9 @@ def _source(source: str) -> tuple[str, str]:
 
 
 def set_language() -> None:
-    """Language switcher callback: interface, answers and speech follow the choice."""
+    """Select the interface and speech language; typed answers detect their own language."""
     ss = st.session_state
-    if ss.get("ui_lang") not in LANGS:  # the segmented control can be cleared
+    if ss.get("ui_lang") not in LANGS:
         ss.ui_lang = L()
     ss.lang = ss.ui_lang
 
@@ -496,14 +502,14 @@ def _load_settings(preset: dict) -> None:
             break
 
 
-def _build_request(query: str) -> RecommendRequest:
+def _build_request(query: str, answer_language: str | None = None) -> RecommendRequest:
     ss = st.session_state
     return RecommendRequest(
         query=query,
         lat=ss.lat,
         lon=ss.lon,
         max_distance_m=ss.max_distance_m,
-        lang=ss.lang,
+        lang=(answer_language if answer_language in CORE_LANGUAGES else "en") if answer_language else ss.lang,
         group_size=ss.group_size,
         accessible=ss.accessible,
         weather=ss.weather,
@@ -621,9 +627,11 @@ def close_settings() -> None:
 def _ask(query: str, preset_id: str | None = None, via: str | None = None) -> None:
     ss = st.session_state
     convo = _active_or_new_convo()
+    answer_language = detect_answer_language(query, L())
     convo["entries"].append({
         "query": query,
-        "req_json": _build_request(query).model_dump_json(),
+        "req_json": _build_request(query, answer_language).model_dump_json(),
+        "answer_language": answer_language,
         "start": start_label(),
         "via": via,
     })
@@ -760,17 +768,36 @@ if "convos" not in st.session_state:
 
 
 @st.cache_data(show_spinner=False, max_entries=64)
-def run_recommendations(req_json: str) -> RecommendResponse:
+def run_recommendations(req_json: str, use_llm: bool = True) -> RecommendResponse:
     """Same request -> same answer: no repeated LLM calls on reruns or repeated scenarios."""
     _warmup_thread().join()  # reuse the background load instead of loading the model twice
-    return generate_recommendations(RecommendRequest.model_validate_json(req_json))
+    req = RecommendRequest.model_validate_json(req_json)
+    if use_llm:
+        return generate_recommendations(req)
+    # Additional languages compose the final text in the localization call, avoiding a second generation.
+    return generate_recommendations(req, use_llm=False)
 
 
 def entry_response(entry: dict) -> RecommendResponse:
-    """Keep completed answers in the conversation across reruns and cache eviction."""
+    """Cache the canonical answer and its localized display copy per message."""
+    req = RecommendRequest.model_validate_json(entry["req_json"])
+    language = entry.get("answer_language", req.lang)
     if "response_json" not in entry:
-        entry["response_json"] = run_recommendations(entry["req_json"]).model_dump_json()
-    return RecommendResponse.model_validate_json(entry["response_json"])
+        search_query, translated = prepare_search_query(req.query, language)
+        entry["search_query"] = search_query
+        entry["query_translation_ok"] = translated
+        search_req = req.model_copy(update={"query": search_query})
+        entry["response_json"] = run_recommendations(
+            search_req.model_dump_json(), use_llm=language in CORE_LANGUAGES,
+        ).model_dump_json()
+    if "presentation" not in entry:
+        canonical = RecommendResponse.model_validate_json(entry["response_json"])
+        entry["presentation"] = localize_answer(canonical, language, answer_dictionary())
+        if not entry.get("query_translation_ok", True):
+            note = ("搜索请求翻译暂时不可用，搜索结果可能不完整。" if language == "zh" else
+                    "Search translation is unavailable; results may be incomplete.")
+            entry["presentation"]["note"] = " ".join(filter(None, [note, entry["presentation"]["note"]]))
+    return RecommendResponse.model_validate_json(entry["presentation"]["response_json"])
 
 
 # ── Rendering helpers ────────────────────────────────────────────────────────
@@ -874,7 +901,7 @@ def _card_html(idx: int, rec, closed_reports: int = 0) -> str:
         official = (
             f'<div class="aw-note"><a href="{escape(poi.source)}" target="_blank">{t("visit_source", lang)}</a>'
             f" · {t('received', lang, date=escape(poi.collected_at))}"
-            + (f"<br/>{escape(poi.description)}" if poi.description else "")
+            + (f"<br/>{escape(poi.description)}" if poi.description and lang == "ru" else "")
             + "</div>"
         )
     return f"""
@@ -904,6 +931,7 @@ def _card_html(idx: int, rec, closed_reports: int = 0) -> str:
             </div>
             <details>
                 <summary>{t("facts_summary", lang)}</summary>
+                <div><b>{t("original_name", lang)}</b> {escape(poi.name if poi else rec.name)}</div>
                 <div><b>{t("facts", lang)}</b><br/>{facts}</div>
                 <div><b>{t("boundary", lang)}</b> {escape(rec.generated_plan_note or "—")}</div>
             </details>
@@ -1041,7 +1069,7 @@ def render_map(resp: RecommendResponse, height: int = 340) -> None:
     center_lat, center_lon = resp.used_data.rounded_coords
     rec_ids = {r.poi_id for r in resp.recommendations}
     rec_points = [
-        {"name": f"{i}. {r.name} · {r.distance_m} {'m' if lang == 'en' else 'м'}", "label": str(i),
+        {"name": f"{i}. {r.name} · {r.distance_m} {t('meters', lang)}", "label": str(i),
          "lat": r.lat, "lon": r.lon,
          "color": STATUS_RGB.get(r.open_status, STATUS_RGB["unknown"])}
         for i, r in enumerate(resp.recommendations, start=1)
@@ -1186,7 +1214,7 @@ def render_share(resp: RecommendResponse) -> None:
         return
     lang = L()
     url = maps_route_url(stops)
-    text = share_text(stops, lang)
+    text = share_text(stops, lang if lang in LANGS else "en")
     col_share, col_big = st.columns([3, 2], gap="small")
     if col_big.button(t("share_big", lang), key="share_big", icon=":material/fullscreen:", use_container_width=True):
         show_big_qr(url, t("share_hint", lang))
@@ -1216,7 +1244,7 @@ def render_route(resp: RecommendResponse) -> None:
                 <div class="aw-stop-stage">{t("stop_step", lang)} {stop.step} · {escape(stop.stage_note)}</div>
                 <div class="aw-stop-name">{escape(stop.name)}</div>
                 <div class="aw-stop-row"><span>{t("stop_walk", lang)}</span>
-                    <b>{stop.from_prev_m} {"m" if lang == "en" else "м"} · ~{stop.from_prev_walk_min} {m_unit}</b></div>
+                    <b>{stop.from_prev_m} {t("meters", lang)} · ~{stop.from_prev_walk_min} {m_unit}</b></div>
                 <div class="aw-stop-row"><span>{t("stop_visit", lang)}</span><b>~{stop.visit_min} {m_unit}</b></div>
                 <div class="aw-stop-row"><span>{t("stop_offset", lang)}</span>
                     <b>+{stop.arrival_offset_min}…+{stop.departure_offset_min} {m_unit}</b></div>
@@ -1294,15 +1322,12 @@ with col_side:
                 <img src="{LOGO_URL}" alt="{t("logo_alt", lang)}">
             </div>
             """)
-        st.segmented_control(
-            t("language", lang),
-            options=list(LANGS),
-            format_func=LANG_SHORT.get,
-            key="ui_lang",
-            on_change=set_language,
-            label_visibility="collapsed",
-            width="stretch",
-        )
+        with st.popover(LANG_SHORT[lang], icon=":material/translate:",
+                        help=t("interface_language", lang), use_container_width=True,
+                        key="ui_language_menu"):
+            st.selectbox(t("interface_language", lang), options=list(LANGS),
+                         format_func=LANG_SHORT.get, key="ui_lang", on_change=set_language)
+            st.caption(t("answer_language_auto", lang))
         st.button(
             t("new_chat", lang),
             key="btn_newchat",
@@ -1405,14 +1430,18 @@ with col_chat:
                 req = RecommendRequest.model_validate_json(entry["req_json"])
                 render_user(entry, req)
                 latest = i == len(entries) - 1
-                if "response_json" not in entry:
+                if "response_json" not in entry or "presentation" not in entry:
                     loading = st.empty()
                     loading.html(_skeleton_html())
                     resp = entry_response(entry)
                     loading.empty()
                 else:
                     resp = entry_response(entry)
-                render_answer(req, resp, latest=latest, entry_key=f"{convo['id']}_{i}")
+                with answer_context(entry["presentation"]):
+                    if entry["presentation"]["note"]:
+                        st.caption(entry["presentation"]["note"])
+                    search_req = req.model_copy(update={"query": entry.get("search_query", req.query)})
+                    render_answer(search_req, resp, latest=latest, entry_key=f"{convo['id']}_{i}")
                 if latest:
                     render_chat_header(header, resp.used_data.generation_mode)
 
@@ -1432,9 +1461,10 @@ if col_settings is None:
             )
             _last = entry_response(_convo["entries"][-1]) if _convo and _convo["entries"] else None
             if _last is not None and _last.recommendations:
-                render_map(_last, height=420)
-                render_share(_last)
-                render_route_timeline(_last)
+                with answer_context(_convo["entries"][-1]["presentation"]):
+                    render_map(_last, height=420)
+                    render_share(_last)
+                    render_route_timeline(_last)
             else:
                 _html(f"""
                     <div class="aw-map-empty">

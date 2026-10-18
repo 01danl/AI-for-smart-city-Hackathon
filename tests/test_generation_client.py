@@ -45,6 +45,9 @@ def test_openrouter_configuration_and_chat_call(monkeypatch):
         "model": "nvidia/nemotron-3-ultra-550b-a55b:free",
         "messages": messages,
     }
+    assert client.complete(messages, timeout=25, max_tokens=6000) == "ok"
+    assert seen["request"]["timeout"] == 25
+    assert seen["request"]["max_tokens"] == 6000
 
 
 def test_missing_key_fails_before_request(monkeypatch):
@@ -65,7 +68,8 @@ def test_prompt_never_leaks_raw_user_coordinates():
     assert "rounded_100m" in prompt_dump
 
 
-def test_anti_hallucination_drops_invented_poi_ids(monkeypatch):
+@pytest.mark.parametrize("lang", ["ru", "en"])
+def test_anti_hallucination_drops_invented_poi_ids(monkeypatch, lang):
     monkeypatch.setenv("OPENROUTER_API_KEY", "test-key")
     cands = retrieve("кофе", 51.1283, 71.4305, max_distance_m=1500, top_k=3)
     real_id = cands[0].poi.id
@@ -83,6 +87,7 @@ def test_anti_hallucination_drops_invented_poi_ids(monkeypatch):
         }},
         {{
           "poi_id": "{real_id}",
+          "display_name": "Verified Cafe",
           "why": "Реальная кофейня рядом",
           "visit_min": 45,
           "what_to_do": "Взять кофе и поработать",
@@ -94,9 +99,10 @@ def test_anti_hallucination_drops_invented_poi_ids(monkeypatch):
     """
     monkeypatch.setattr(recommender, "complete", lambda _msgs: fake_llm_json)
     resp = generate_recommendations(
-        RecommendRequest(query="кофе", lat=51.1283, lon=71.4305, max_distance_m=1500)
+        RecommendRequest(query="кофе", lat=51.1283, lon=71.4305, max_distance_m=1500, lang=lang)
     )
     returned_ids = [r.poi_id for r in resp.recommendations]
     assert "hallucinated_fake_cafe_999" not in returned_ids
     assert returned_ids == [real_id]
     assert resp.used_data.generation_mode == "openrouter_llm"
+    assert resp.recommendations[0].name == ("Verified Cafe" if lang == "en" else cands[0].poi.name)
