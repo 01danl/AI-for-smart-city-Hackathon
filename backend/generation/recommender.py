@@ -32,10 +32,12 @@ from backend.retrieval import (
 )
 from backend.retrieval.geo import round_coords
 from backend.retrieval.hours import check_visit_window
+from backend.retrieval.index import load_pois
 from backend.retrieval.intent import QueryIntent
 
 from .client import complete
 from .prompts import build_rag_messages
+from .proximity import nearby_candidates, nearby_requested, search_categories
 
 log = logging.getLogger(__name__)
 
@@ -459,7 +461,8 @@ def _build_disclaimer(
     return " ".join(parts)
 
 
-def generate_recommendations(req: RecommendRequest, *, use_llm: bool = True) -> RecommendResponse:
+def generate_recommendations(req: RecommendRequest, *, use_llm: bool = True,
+                             prefer_nearby: bool | None = None) -> RecommendResponse:
     """End-to-end RAG recommendation pipeline with anti-hallucination guardrails."""
     intent = parse_query_intent(
         req.query,
@@ -484,7 +487,9 @@ def generate_recommendations(req: RecommendRequest, *, use_llm: bool = True) -> 
             search_lon = intent.anchor_landmark.lon
             anchor_note = f"{intent.anchor_landmark.name} ({search_lat:.4f}, {search_lon:.4f})"
 
-    effective_categories = req.categories if req.categories else None
+    inferred_categories = search_categories(req.query, req.categories)
+    proximity_mode = nearby_requested(req.query, inferred_categories) if prefer_nearby is None else prefer_nearby
+    effective_categories = inferred_categories if proximity_mode else (req.categories or None)
     raw_candidates = retrieve(
         req.query,
         search_lat,
@@ -492,7 +497,8 @@ def generate_recommendations(req: RecommendRequest, *, use_llm: bool = True) -> 
         max_distance_m=req.max_distance_m,
         categories=effective_categories,
         now_iso=req.now_iso,
-        top_k=10,
+        # Nearby requests inspect the full local pool so brand-name boosts cannot hide nearer POIs.
+        top_k=max(10, len(load_pois())) if proximity_mode else 10,
     )
 
     ranked_candidates = _contextual_rerank(
@@ -501,9 +507,11 @@ def generate_recommendations(req: RecommendRequest, *, use_llm: bool = True) -> 
         accessible=req.accessible,
         now_iso=req.now_iso,
     )
+    if proximity_mode:
+        ranked_candidates = nearby_candidates(ranked_candidates, req.max_distance_m)
 
     rounded = round_coords(search_lat, search_lon)
-    used_filters = list(req.categories or intent.inferred_categories)
+    used_filters = list(effective_categories or intent.inferred_categories)
     used_tags = list(dict.fromkeys(intent.inferred_tags + intent.semantic_tags))
 
     # Empty retrieval result (e.g. S8 user outside the city or too small radius)
@@ -617,6 +625,9 @@ def generate_recommendations(req: RecommendRequest, *, use_llm: bool = True) -> 
                 )
             )
         gen_mode = "smart_fallback"
+
+    if proximity_mode:
+        recommendations.sort(key=lambda item: item.distance_m)
 
     route: MicroRoute | None = None
     if req.include_route and len(ranked_candidates) >= 2:

@@ -39,9 +39,11 @@ def sync_voice_history(store: MutableMapping, voice: dict, start: str, *, max_hi
         entry["voice_final"] = turn.get("final", False)
         entry["voice_interrupted"] = turn.get("interrupted", False)
         result = turn.get("result")
+        if result:
+            entry["search_query"] = RecommendRequest.model_validate_json(result["req_json"]).query
+            entry["voice_search"] = result.get("search_details", {})
         if result and entry.get("response_json") != result["response_json"]:
             entry["response_json"] = result["response_json"]
-            entry["search_query"] = RecommendRequest.model_validate_json(result["req_json"]).query
             entry["presentation"] = {
                 "language": context.lang, "requested_language": context.lang, "labels": {},
                 "response_json": result["response_json"], "note": "",

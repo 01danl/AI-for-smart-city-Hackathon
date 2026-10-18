@@ -775,9 +775,18 @@ def entry_response(entry: dict) -> RecommendResponse:
         entry["search_query"] = search_query
         entry["query_translation_ok"] = translated
         search_req = req.model_copy(update={"query": search_query})
-        entry["response_json"] = run_recommendations(
-            search_req.model_dump_json(), use_llm=language in CORE_LANGUAGES,
-        ).model_dump_json()
+        if not translated and language not in CORE_LANGUAGES:
+            # A failed translation must not turn unfamiliar tokens into arbitrary nearby POIs.
+            entry["response_json"] = RecommendResponse(
+                used_data=UsedData(rounded_coords=round_coords(req.lat, req.lon),
+                                   generation_mode="translation_unavailable"),
+                recommendations=[],
+                disclaimer="Search translation is unavailable. Please retry the translation or rephrase your request.",
+            ).model_dump_json()
+        else:
+            entry["response_json"] = run_recommendations(
+                search_req.model_dump_json(), use_llm=language in CORE_LANGUAGES,
+            ).model_dump_json()
     if "presentation" not in entry:
         canonical = RecommendResponse.model_validate_json(entry["response_json"])
         entry["presentation"] = localize_answer(canonical, language, answer_dictionary())
@@ -1378,6 +1387,15 @@ with col_chat:
                     render_live_reply(entry)
                     if not entry.get("response_json"):
                         continue
+                    with st.expander("Как понят голосовой запрос", icon=":material/hearing:"):
+                        st.write("**Для поиска:**", entry.get("search_query", entry["query"]))
+                        details = entry.get("voice_search", {})
+                        categories = details.get("filters", [])
+                        st.caption(" · ".join(filter(None, [
+                            entry["start"],
+                            f"Поиск в пределах {details['radius_m']} м" if details.get("radius_m") else "",
+                            ", ".join(category_label(category, lang) for category in categories),
+                        ])))
                 if "response_json" not in entry or "presentation" not in entry:
                     loading = st.empty()
                     loading.html(_skeleton_html())
