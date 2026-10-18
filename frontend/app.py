@@ -64,6 +64,7 @@ from backend.retrieval.geo import round_coords  # noqa: E402
 from backend.retrieval.index import load_pois  # noqa: E402
 from frontend.geolocation import GEOLOCATION_JS, geolocation_error  # noqa: E402
 from frontend.voice_input import transcribe_question  # noqa: E402
+from frontend.live_voice import render_live_voice, reset_live_voice  # noqa: E402
 from frontend.share import Stop, maps_route_url, qr_svg, share_text, telegram_url, whatsapp_url  # noqa: E402
 from frontend.map_view import build_map_deck  # noqa: E402
 from frontend.i18n import (  # noqa: E402
@@ -576,12 +577,14 @@ def _ss_get(key: str, default=None):
 def new_chat() -> None:
     """Sidebar callback: go to a blank chat; it joins the history on the first question."""
     st.session_state.active_convo = None
+    reset_live_voice()
     _clear_voice_note()
 
 
 def open_convo(convo_id: int) -> None:
     """Sidebar callback: reopen a past conversation."""
     st.session_state.active_convo = convo_id
+    reset_live_voice()
     _clear_voice_note()
 
 
@@ -601,6 +604,7 @@ def close_settings() -> None:
 
 
 def _ask(query: str, preset_id: str | None = None, via: str | None = None) -> None:
+    reset_live_voice()
     ss = st.session_state
     convo = _active_or_new_convo()
     answer_language = detect_answer_language(query, L())
@@ -1291,6 +1295,7 @@ with col_side:
             )
 
 
+live_result = None
 with col_chat:
     with st.container(key="chat", height=800, border=False):
         convo = next(
@@ -1320,6 +1325,12 @@ with col_chat:
 
         messages = st.container(key="messages", height="stretch", border=False, autoscroll=True)
         with st.container(key="composer"):
+            live_enabled = st.toggle("Голосовой разговор", key="live_voice_enabled",
+                                     help="Живой разговор с ответами вслух. Обычный микрофон в поле ввода — диктовка.")
+            if live_enabled:
+                live_result = render_live_voice(_build_request("voice conversation"))
+            elif st.session_state.get("_live_voice", {}).get("session"):
+                reset_live_voice()
             voice_ready = _server_asr_ready()  # speech-to-text needs the OpenRouter key
             st.chat_input(
                 t("placeholder_voice" if voice_ready else "placeholder", lang),
@@ -1360,6 +1371,10 @@ with col_chat:
                     render_answer(search_req, resp, latest=latest, entry_key=f"{convo['id']}_{i}")
                 if latest:
                     render_chat_header(header, resp.used_data.generation_mode)
+            if live_result:
+                st.caption("Последний голосовой поиск · карточки на языке интерфейса")
+                st.write(live_result["query"])
+                render_answer(live_result["request"], live_result["response"], latest=True, entry_key="live_voice")
 
 if col_settings is None:
     with col_right:
@@ -1376,8 +1391,12 @@ if col_settings is None:
                 (c for c in st.session_state.convos if c["id"] == st.session_state.active_convo), None,
             )
             _last = entry_response(_convo["entries"][-1]) if _convo and _convo["entries"] else None
+            if live_result:
+                _last = live_result["response"]
             if _last is not None and _last.recommendations:
-                with answer_context(_convo["entries"][-1]["presentation"]):
+                _map_presentation = (_convo["entries"][-1]["presentation"] if not live_result else
+                                     {"language": lang, "labels": {}})
+                with answer_context(_map_presentation):
                     render_map(_last, height=420)
                     render_share(_last)
                     render_route_timeline(_last)

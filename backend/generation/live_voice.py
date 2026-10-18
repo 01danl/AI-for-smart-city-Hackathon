@@ -27,7 +27,9 @@ Before recommending or making factual claims about places, call search_places.
 Translate the search into a standalone English query, preserving place names,
 preferences, weather and time budget. Never invent POIs, hours, prices or amenities.
 Use only the returned places. Say approximate meters from the start, walking minutes,
-why and an activity; keep answers to 1–3 places and a few short sentences.
+why and an activity. Default to one best place, offer more if asked (at most three).
+Keep spoken replies under 50 words (100 Chinese characters). Do not read lists of
+all facts or a whole route aloud. If more detail is needed, refer to the visible cards.
 Use name for Russian/Kazakh and name_en for other languages. Translate explanations.
 Only say 'open now' when open_status is confirmed_open. For likely_open qualify it;
 for unknown explicitly say hours are unverified; mention likely_closed warnings.
@@ -85,7 +87,10 @@ def live_setup() -> dict:
         "tools": [SEARCH_TOOL],
         "inputAudioTranscription": {},
         "outputAudioTranscription": {},
-        "realtimeInputConfig": {"activityHandling": "START_OF_ACTIVITY_INTERRUPTS"},
+        "realtimeInputConfig": {
+            "activityHandling": "START_OF_ACTIVITY_INTERRUPTS",
+            "automaticActivityDetection": {"disabled": False, "silenceDurationMs": 500, "prefixPaddingMs": 200},
+        },
     }
 
 

@@ -1,0 +1,42 @@
+/* The component lives in an iframe, so its styles cannot leak into Streamlit. */
+:root {
+    font-family: Inter, system-ui, sans-serif;
+    color: #1d2433;
+    --accent: #0284c7;
+    --soft: #f0f9ff;
+    --muted: #526175;
+    --border: #d9e7ef;
+    --surface: #fff;
+    --error: #b42318;
+    --space-1: 4px;
+    --space-2: 8px;
+    --space-3: 12px;
+    --space-4: 16px;
+    --space-6: 24px;
+    --radius: 12px;
+    font-size: 14px;
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: transparent; }
+section { border: 1px solid var(--border); border-radius: var(--radius); padding: var(--space-4); background: var(--surface); }
+.heading { display: flex; align-items: center; gap: var(--space-3); }
+.orb { display: grid; place-items: center; width: 48px; height: 48px; border-radius: 50%; color: var(--accent); background: var(--soft); font-weight: 700; flex: none; }
+#status, .privacy, .hint { color: var(--muted); font-size: 12px; line-height: 1.5; }
+#status { margin-top: var(--space-1); }
+.privacy, .hint { margin: var(--space-3) 0; }
+.hint { margin-bottom: 0; }
+.controls { display: flex; flex-wrap: wrap; gap: var(--space-2); }
+button { font: inherit; font-weight: 600; padding: var(--space-2) var(--space-3); min-height: 44px; border: 1px solid var(--border); border-radius: var(--radius); color: inherit; background: var(--surface); cursor: pointer; transition: background 160ms; }
+button:hover { background: var(--soft); }
+button:focus-visible { outline: 3px solid var(--accent); outline-offset: 2px; }
+button:disabled { opacity: .6; cursor: wait; }
+#start { color: white; background: var(--accent); border-color: var(--accent); }
+#mute[aria-pressed="true"] { background: var(--soft); color: var(--accent); }
+[hidden] { display: none !important; }
+#error { color: var(--error); font-size: 12px; line-height: 1.5; }
+#transcript { max-height: 200px; overflow-y: auto; overflow-wrap: anywhere; }
+.turn { padding: var(--space-2) var(--space-3); border-radius: var(--radius); margin-top: var(--space-2); font-size: 14px; line-height: 1.5; background: var(--soft); }
+.turn.user { background: #f5f6f8; }
+.turn small { display: block; font-size: 12px; font-weight: 600; margin-bottom: var(--space-1); color: var(--muted); }
+@media (max-width: 400px) { section { padding: var(--space-3); } .controls button { flex-grow: 1; } }
+@media (prefers-reduced-motion: reduce) { button { transition: none; } }
