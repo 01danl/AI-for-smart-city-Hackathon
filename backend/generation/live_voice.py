@@ -23,6 +23,10 @@ Speak in the language of the user's latest utterance, including Kazakh, Russian,
 English or Mandarin. Switch naturally when the user switches. Do not force the UI language.
 Keep conversational context: resolve 'closer', 'the second one', 'instead a cafe'
 using the previous turns. Ask a short clarifying question if needed.
+Every request to find places, change preferences, show the map or build/change a
+walking route MUST call search_places, even if you remember earlier results.
+This tool updates the user's visible cards and map. Do not merely describe a route
+from memory. For route requests include 'walking route' and the time budget in query.
 Before recommending or making factual claims about places, call search_places.
 Translate the search into a standalone English query, preserving place names,
 preferences, weather and time budget. Never invent POIs, hours, prices or amenities.
@@ -152,6 +156,13 @@ def search_places(arguments: dict, context: recommender.RecommendRequest) -> tup
         places.append(place)
     return {
         "places": places,
+        "route": ({
+            "total_distance_m": response.route.total_distance_m,
+            "total_walk_min": response.route.total_walk_min,
+            "total_duration_min": response.route.total_duration_min,
+            "stops": [stop.model_dump(include={"step", "poi_id", "name", "from_prev_m",
+                       "from_prev_walk_min", "visit_min", "open_status"}) for stop in response.route.stops],
+        } if response.route else None),
         "used_data": {"location": "rounded_100m", "filters": response.used_data.filters,
                       "tags": response.used_data.tags, "radius_m": req.max_distance_m,
                       "checked_at": req.now_iso},

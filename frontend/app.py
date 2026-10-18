@@ -64,7 +64,8 @@ from backend.retrieval.geo import round_coords  # noqa: E402
 from backend.retrieval.index import load_pois  # noqa: E402
 from frontend.geolocation import GEOLOCATION_JS, geolocation_error  # noqa: E402
 from frontend.voice_input import transcribe_question  # noqa: E402
-from frontend.live_voice import render_live_voice, reset_live_voice  # noqa: E402
+from frontend import live_voice as voice_ui  # noqa: E402
+from frontend.voice_history import latest_result_entry, sync_voice_history  # noqa: E402
 from frontend.share import Stop, maps_route_url, qr_svg, share_text, telegram_url, whatsapp_url  # noqa: E402
 from frontend.map_view import build_map_deck  # noqa: E402
 from frontend.i18n import (  # noqa: E402
@@ -577,14 +578,14 @@ def _ss_get(key: str, default=None):
 def new_chat() -> None:
     """Sidebar callback: go to a blank chat; it joins the history on the first question."""
     st.session_state.active_convo = None
-    reset_live_voice()
+    voice_ui.reset_live_voice()
     _clear_voice_note()
 
 
 def open_convo(convo_id: int) -> None:
     """Sidebar callback: reopen a past conversation."""
     st.session_state.active_convo = convo_id
-    reset_live_voice()
+    voice_ui.reset_live_voice()
     _clear_voice_note()
 
 
@@ -604,7 +605,7 @@ def close_settings() -> None:
 
 
 def _ask(query: str, preset_id: str | None = None, via: str | None = None) -> None:
-    reset_live_voice()
+    voice_ui.reset_live_voice()
     ss = st.session_state
     convo = _active_or_new_convo()
     answer_language = detect_answer_language(query, L())
@@ -845,7 +846,7 @@ def render_user(entry: dict, req: RecommendRequest) -> None:
     if req.weather != "normal":
         extras.append(weather_label(req.weather, lang).lower())
     meta = " · ".join([f"<span class='msi'>location_on</span> {escape(entry['start'])}", t("meta_radius", lang, km=km), *extras])
-    if entry.get("via") == "voice":
+    if entry.get("via") in {"voice", "live_voice"}:
         meta = f"<span class='msi'>mic</span> {t('meta_voice', lang)} · {meta}"
     _html(f"""
         <div class="aw-row user">
@@ -1295,7 +1296,24 @@ with col_side:
             )
 
 
-live_result = None
+def sync_live_conversation(state: dict) -> None:
+    state.setdefault("start_label", start_label())
+    sync_voice_history(st.session_state, state, state["start_label"], max_history=MAX_HISTORY)
+
+
+def render_live_reply(entry: dict) -> None:
+    """Render the actual spoken answer, without sending it through another model."""
+    text = entry.get("assistant_text", "")
+    if text:
+        safe_text = escape(text).replace("\n", "<br>")
+        note = "Ответ прерван" if entry.get("voice_interrupted") else "Голосовой ответ"
+        _html(f'<div class="aw-row"><div class="aw-bot-badge">AW</div>'
+              f'<div class="aw-answer"><div class="aw-bubble">{safe_text}'
+              f'<div class="aw-voice-label">{note}</div></div></div></div>')
+    elif not entry.get("voice_final"):
+        st.caption("Подбираю ответ на голосовой запрос…")
+
+
 with col_chat:
     with st.container(key="chat", height=800, border=False):
         convo = next(
@@ -1303,8 +1321,9 @@ with col_chat:
         )
         entries = convo["entries"] if convo else []
         last_mode = None
-        if entries:
-            saved_response = entries[-1].get("response_json")
+        _mode_entry = latest_result_entry(entries)
+        if _mode_entry:
+            saved_response = _mode_entry["response_json"]
             last_mode = (RecommendResponse.model_validate_json(saved_response).used_data.generation_mode
                          if saved_response else "pending")
         header = st.empty()
@@ -1328,15 +1347,16 @@ with col_chat:
             live_enabled = st.toggle("Голосовой разговор", key="live_voice_enabled",
                                      help="Живой разговор с ответами вслух. Обычный микрофон в поле ввода — диктовка.")
             if live_enabled:
-                live_result = render_live_voice(_build_request("voice conversation"))
-            elif st.session_state.get("_live_voice", {}).get("session"):
-                reset_live_voice()
+                voice_ui.render_live_voice(_build_request("voice conversation"), on_update=sync_live_conversation)
+            elif st.session_state.get("_live_voice"):
+                voice_ui.reset_live_voice()
             voice_ready = _server_asr_ready()  # speech-to-text needs the OpenRouter key
+            composer_audio = voice_ready and not live_enabled
             st.chat_input(
-                t("placeholder_voice" if voice_ready else "placeholder", lang),
+                t("placeholder_voice" if composer_audio else "placeholder", lang),
                 key="chat_prompt",
                 on_submit=submit_chat,
-                accept_audio=voice_ready,
+                accept_audio=composer_audio,
                 audio_sample_rate=16000,
             )
             _voice = _ss_get("mic_state") or ("idle", None)
@@ -1351,8 +1371,13 @@ with col_chat:
                 """)
             for i, entry in enumerate(entries):
                 req = RecommendRequest.model_validate_json(entry["req_json"])
-                render_user(entry, req)
-                latest = i == len(entries) - 1
+                if entry.get("query"):
+                    render_user(entry, req)
+                latest = not any(e.get("response_json") or e.get("via") != "live_voice" for e in entries[i + 1:])
+                if entry.get("via") == "live_voice":
+                    render_live_reply(entry)
+                    if not entry.get("response_json"):
+                        continue
                 if "response_json" not in entry or "presentation" not in entry:
                     loading = st.empty()
                     loading.html(_skeleton_html())
@@ -1371,10 +1396,6 @@ with col_chat:
                     render_answer(search_req, resp, latest=latest, entry_key=f"{convo['id']}_{i}")
                 if latest:
                     render_chat_header(header, resp.used_data.generation_mode)
-            if live_result:
-                st.caption("Последний голосовой поиск · карточки на языке интерфейса")
-                st.write(live_result["query"])
-                render_answer(live_result["request"], live_result["response"], latest=True, entry_key="live_voice")
 
 if col_settings is None:
     with col_right:
@@ -1390,13 +1411,10 @@ if col_settings is None:
             _convo = next(
                 (c for c in st.session_state.convos if c["id"] == st.session_state.active_convo), None,
             )
-            _last = entry_response(_convo["entries"][-1]) if _convo and _convo["entries"] else None
-            if live_result:
-                _last = live_result["response"]
+            _map_entry = latest_result_entry(_convo["entries"]) if _convo else None
+            _last = entry_response(_map_entry) if _map_entry else None
             if _last is not None and _last.recommendations:
-                _map_presentation = (_convo["entries"][-1]["presentation"] if not live_result else
-                                     {"language": lang, "labels": {}})
-                with answer_context(_map_presentation):
+                with answer_context(_map_entry["presentation"]):
                     render_map(_last, height=420)
                     render_share(_last)
                     render_route_timeline(_last)
