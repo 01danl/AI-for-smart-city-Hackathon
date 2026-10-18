@@ -6,7 +6,8 @@ import { webcrypto } from "node:crypto";
 test("session handles reruns, tool cancellation, mute, barge-in and late grants safely", async () => {
     const elements = new Map();
     function element() { return {
-        hidden: false, textContent: "", children: [], scrollHeight: 100,
+        hidden: false, textContent: "", children: [], scrollHeight: 100, dataset: {},
+        getBoundingClientRect: () => ({ height: 200 }),
         setAttribute() {}, append(...nodes) { this.children.push(...nodes); },
         get firstElementChild() { return { remove: () => this.children.shift() }; },
     }; }
@@ -17,7 +18,10 @@ test("session handles reruns, tool cancellation, mute, barge-in and late grants 
         }, createElement: element, createTextNode: text => ({ text }),
     };
     const messages = [], listeners = {};
-    globalThis.parent = { postMessage: message => messages.push(message) };
+    globalThis.parent = { postMessage: message => {
+        messages.push(message);
+        if (message.type === "streamlit:setFrameHeight") document.body.scrollHeight = message.height;
+    } };
     globalThis.window = { isSecureContext: true, addEventListener: (name, fn) => { listeners[name] = fn; } };
     globalThis.ResizeObserver = class { observe() {} };
     Object.defineProperty(globalThis, "crypto", { configurable: true, value: webcrypto });
@@ -107,4 +111,40 @@ test("session handles reruns, tool cancellation, mute, barge-in and late grants 
     await tick();
     assert.equal(sockets.length, 1); // Stop during authentication invalidates the arriving grant.
     assert.ok(tracks.every(track => track.stopped));
+
+    render({ configured: true, ack: latestEvent().id });
+    await elements.get("start").onclick();
+    const thirdConnect = latestEvent();
+    render({ configured: true, ack: thirdConnect.id, grant: { ...grant, session: thirdConnect.session } });
+    await tick();
+    sockets[1].onopen();
+    await deliver({ setupComplete: {} });
+    await deliver({ serverContent: { inputTranscription: { text: "Where can I " } } });
+    await deliver({ serverContent: { inputTranscription: { text: "get coffee?" } } });
+    await deliver({ toolCall: { functionCalls: [{ id: "chat-call", name: "search_places", args: { query: "coffee" } }] } });
+    const speech = latestEvent();
+    assert.equal(speech.type, "speech");
+    assert.equal(speech.question, "Where can I get coffee?");
+    render({ ack: speech.id, session: thirdConnect.session });
+    const chatTool = latestEvent();
+    assert.equal(chatTool.type, "tool");
+    assert.equal(chatTool.turn_id, speech.turn_id);
+    render({ ack: chatTool.id, session: thirdConnect.session, tool_results: [
+        { id: "chat-call", name: "search_places", response: { places: [] } },
+    ] });
+    const chatUsed = latestEvent();
+    assert.equal(chatUsed.type, "used");
+    render({ ack: chatUsed.id, session: thirdConnect.session });
+    await deliver({ serverContent: { turnComplete: true } });
+    assert.equal(latestEvent().id, chatUsed.id); // The tool boundary must not close the chat turn.
+    await deliver({ serverContent: { outputTranscription: { text: "Try the nearest cafe." } } });
+    await deliver({ serverContent: { turnComplete: true } });
+    const finalSpeech = latestEvent();
+    assert.equal(finalSpeech.type, "speech");
+    assert.equal(finalSpeech.turn_id, speech.turn_id);
+    assert.equal(finalSpeech.answer, "Try the nearest cafe.");
+    assert.equal(finalSpeech.final, true);
+    render({ ack: finalSpeech.id, session: thirdConnect.session });
+    elements.get("stop").onclick();
+    assert.equal(new Set(messages.filter(message => message.type === "streamlit:setFrameHeight").map(message => message.height)).size, 1);
 });
