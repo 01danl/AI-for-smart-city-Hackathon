@@ -21,8 +21,6 @@ from html import escape
 from pathlib import Path
 
 import pandas as pd
-import pydeck as pdk
-from pydeck.types import String as _DeckString
 import streamlit as st
 
 try:  # optional runtime helpers: browser geolocation + Web Speech API speech-to-text
@@ -49,6 +47,7 @@ from backend.generation import (  # noqa: E402
     OFFICIAL_PRESETS,
     RecommendRequest,
     RecommendResponse,
+    UsedData,
 )
 from backend.generation import recommender as generation_pipeline  # noqa: E402
 from backend.generation.prompts import build_rag_messages  # noqa: E402
@@ -66,6 +65,7 @@ from backend.retrieval.index import load_pois  # noqa: E402
 from frontend.geolocation import GEOLOCATION_JS, geolocation_error  # noqa: E402
 from frontend.voice_input import transcribe_question  # noqa: E402
 from frontend.share import Stop, maps_route_url, qr_svg, share_text, telegram_url, whatsapp_url  # noqa: E402
+from frontend.map_view import build_map_deck  # noqa: E402
 from frontend.i18n import (  # noqa: E402
     LANG_SHORT,
     LANGS,
@@ -131,14 +131,6 @@ STATUS_STYLE: dict[str, tuple[str, str, str]] = {
 SOURCE_STYLE: dict[str, tuple[str, str]] = {
     "poi_data": ("Факты из базы мест", "poi_data"),
     "generated_idea": ("Факты из базы + идея ИИ", "generated_idea"),
-}
-
-# Map dot colors per open status, matching STATUS_STYLE text colors.
-STATUS_RGB: dict[str, list[int]] = {
-    "confirmed_open": [18, 122, 75, 235],
-    "likely_open": [148, 98, 0, 235],
-    "unknown": [2, 132, 199, 235],
-    "likely_closed": [180, 35, 24, 235],
 }
 
 WEATHER_LABELS = {
@@ -366,20 +358,6 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
               background: linear-gradient(90deg, #EEF1F5 0%, #F7F9FB 50%, #EEF1F5 100%);
               background-size: 640px 100%; animation: aw-shimmer 1.2s linear infinite; }}
 
-/* Right map panel */
-.aw-map-empty {{ display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;
-                 color: {SUBTLE}; font-size: 0.84rem; padding: 48px 18px; border: 1px dashed {LINE};
-                 border-radius: 14px; margin-top: 10px; }}
-.aw-map-empty .msi {{ font-size: 34px; color: #CDE5F1; }}
-.aw-tl {{ margin-top: 12px; }}
-.aw-tl-head {{ font-weight: 700; color: {INK}; font-size: 0.86rem; margin-bottom: 6px; }}
-.aw-tl-row {{ display: flex; gap: 10px; padding: 8px 0; border-top: 1px solid {LINE}; }}
-.aw-tl-num {{ flex: none; width: 22px; height: 22px; border-radius: 50%; background: {ACCENT}; color: #fff;
-              display: grid; place-items: center; font-size: 0.72rem; font-weight: 700; margin-top: 1px; }}
-.aw-tl-num.extra {{ background: #fff; border: 2px solid {ACCENT}; width: 18px; height: 18px; }}
-.aw-tl-name {{ font-weight: 600; color: {INK}; font-size: 0.86rem; }}
-.aw-tl-meta {{ font-size: 0.75rem; color: {MUTED}; line-height: 1.4; }}
-
 /* Expanders inside chat (map, route, inspector) */
 .st-key-messages [data-testid="stExpander"] {{ max-width: 680px; margin-left: 46px; background: {PANEL};
                                                border-radius: 12px; }}
@@ -390,8 +368,6 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 .aw-stop-name {{ font-weight: 700; color: {INK}; margin: 3px 0 6px 0; font-size: 0.92rem; }}
 .aw-stop-row {{ display: flex; justify-content: space-between; font-size: 0.78rem; color: {MUTED}; padding: 2px 0; }}
 .aw-stop-row b {{ color: {INK}; }}
-.aw-legend {{ display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 0.74rem; color: {MUTED}; margin-top: 6px; }}
-.aw-dot {{ display: inline-block; width: 8px; height: 8px; border-radius: 50%; margin-right: 5px; }}
 
 /* Composer */
 .st-key-composer {{ padding: 12px 24px 2px; border-top: 1px solid {LINE}; background: {PAGE}; }}
@@ -445,7 +421,7 @@ html, body, [class*="css"], .stMarkdown, input, textarea, button, label {{
 """
 
 # Style-only HTML is kept outside the layout so it does not add an empty row.
-st.html(CSS)
+st.html(CSS + "<style>" + (ROOT / "styles" / "app.css").read_text(encoding="utf-8") + "</style>")
 
 
 # ── Language ─────────────────────────────────────────────────────────────────
@@ -1057,116 +1033,45 @@ def render_answer(req: RecommendRequest, resp: RecommendResponse, latest: bool, 
             render_inspector(req, resp)
 
 
-def _fit_view(points: list[list[float]], px: int) -> pdk.ViewState:
-    """Center and zoom so every point fits into a map about `px` pixels across."""
-    lons = [p[0] for p in points]
-    lats = [p[1] for p in points]
-    lat = (max(lats) + min(lats)) / 2
-    lon = (max(lons) + min(lons)) / 2
-    coslat = math.cos(math.radians(lat))
-    extent_m = max((max(lats) - min(lats)) * 111_320, (max(lons) - min(lons)) * 111_320 * coslat, 400)
-    # deck.gl / MapLibre use 512 px tiles: ~78 271 m per pixel at zoom 0 on the equator.
-    # 1.6 leaves room for the markers at the edges.
-    zoom = math.log2(78_271 * coslat * px / (extent_m * 1.6))
-    return pdk.ViewState(latitude=lat, longitude=lon, zoom=max(11.0, min(15.0, zoom)), pitch=0)
+def reset_map_view() -> None:
+    st.session_state.map_view_revision = st.session_state.get("map_view_revision", 0) + 1
 
 
 def render_map(resp: RecommendResponse, height: int = 340) -> None:
     lang = L()
-    center_lat, center_lon = resp.used_data.rounded_coords
-    rec_ids = {r.poi_id for r in resp.recommendations}
-    rec_points = [
-        {"name": f"{i}. {r.name} · {r.distance_m} {t('meters', lang)}", "label": str(i),
-         "lat": r.lat, "lon": r.lon,
-         "color": STATUS_RGB.get(r.open_status, STATUS_RGB["unknown"])}
-        for i, r in enumerate(resp.recommendations, start=1)
-    ]
-    stops = resp.route.stops if resp.route and len(resp.route.stops) >= 2 else []
-    # Route stops that are not among the cards still need a marker, or the line ends in nowhere.
-    extra_points = [
-        {"name": t("map_route_step", lang, n=s.step, name=s.name), "lat": s.lat, "lon": s.lon}
-        for s in stops if s.poi_id not in rec_ids
-    ]
-    layers = [
-        # ~100 m privacy zone around the rounded user location
-        pdk.Layer(
-            "ScatterplotLayer",
-            data=[{"name": t("map_start", lang), "lat": center_lat, "lon": center_lon}],
-            get_position="[lon, lat]",
-            get_fill_color=[2, 132, 199, 38],
-            get_line_color=[2, 132, 199, 200],
-            get_radius=110,
-            stroked=True,
-            line_width_min_pixels=1.5,
-            pickable=True,
-        ),
-    ]
-    if stops:
-        path = [[center_lon, center_lat]] + [[s.lon, s.lat] for s in stops]
-        layers.append(pdk.Layer(
-            "PathLayer",
-            data=[{"name": resp.route.title, "path": path}],
-            get_path="path",
-            get_color=[2, 132, 199, 170],
-            width_min_pixels=3,
-            pickable=True,
-        ))
-    layers += [
-        pdk.Layer(
-            "ScatterplotLayer",
-            data=extra_points,
-            get_position="[lon, lat]",
-            get_fill_color=[255, 255, 255, 255],
-            get_line_color=[2, 132, 199, 230],
-            get_radius=6,
-            radius_units=_DeckString("pixels"),
-            stroked=True,
-            line_width_min_pixels=2,
-            pickable=True,
-        ),
-        pdk.Layer(
-            "ScatterplotLayer",
-            data=rec_points,
-            get_position="[lon, lat]",
-            get_fill_color="color",
-            get_line_color=[255, 255, 255, 255],
-            get_radius=11,
-            radius_units=_DeckString("pixels"),
-            stroked=True,
-            line_width_min_pixels=2,
-            pickable=True,
-        ),
-        # Numbers on the markers match the "#1, #2, #3" badges on the cards.
-        pdk.Layer(
-            "TextLayer",
-            data=rec_points,
-            get_position="[lon, lat]",
-            get_text="label",
-            get_size=13,
-            get_color=[255, 255, 255, 255],
-            get_text_anchor=_DeckString("middle"),
-            get_alignment_baseline=_DeckString("center"),
-            font_weight=700,
-        ),
-    ]
-    points = [[center_lon, center_lat]] + [[p["lon"], p["lat"]] for p in rec_points + extra_points]
-    st.pydeck_chart(
-        pdk.Deck(
-            map_style="https://basemaps.cartocdn.com/gl/positron-gl-style/style.json",
-            initial_view_state=_fit_view(points, px=300 if height >= 400 else 520),
-            layers=layers,
-            tooltip={"text": "{name}"},
-        ),
-        height=height,
-    )
+    ui_lang = norm_lang(st.session_state.lang)
+    controls, fit = st.columns([1, 1], gap="small")
+    with controls.popover(t("mapview_layers", ui_lang), icon=":material/layers:", use_container_width=True):
+        theme = st.radio(t("mapview_style", ui_lang), options=["light", "dark"],
+                         format_func=lambda value: t("mapview_" + value, ui_lang), key="map_theme")
+        show_names = st.checkbox(t("mapview_names", ui_lang), value=True, key="map_names")
+    fit.button(t("mapview_fit", ui_lang), icon=":material/fit_screen:", key="fit_map",
+               on_click=reset_map_view, use_container_width=True)
+    route = resp.route
+    if route:
+        _html(f"""
+            <div class="aw-map-summary">
+                <span><span class="msi">directions_walk</span><strong>{route.total_walk_min}</strong>{t("min", ui_lang)}</span>
+                <span><strong>{route.total_distance_m}</strong>{t("meters", ui_lang)}</span>
+                <span><strong>{len(route.stops)}</strong>{t("mapview_stops", ui_lang)}</span>
+            </div>
+        """)
+    deck = build_map_deck(resp, height=height, theme=theme, show_names=show_names,
+                          start_label=t("map_start", lang),
+                          status_labels={status: _status(status)[0] for status in STATUS_STYLE})
+    with st.container(key="map_canvas"):
+        st.pydeck_chart(deck, height=height,
+                        key=f"walk_map_{st.session_state.get('map_view_revision', 0)}")
+    present = {rec.open_status for rec in resp.recommendations}
+    if route:
+        present.update(stop.open_status for stop in route.stops)
     legend = "".join(
-        f'<span><span class="aw-dot" style="background:rgb({c[0]},{c[1]},{c[2]})"></span>{_status(s)[0]}</span>'
-        for s, c in STATUS_RGB.items()
+        f'<span class="aw-status-{status}"><i class="aw-dot"></i>{_status(status)[0]}</span>'
+        for status in STATUS_STYLE if status in present
     )
-    st.markdown(
-        f'<div class="aw-legend">{legend}<span>{t("map_legend_tail", lang)}</span></div>',
-        unsafe_allow_html=True,
-    )
+    if legend:
+        _html(f'<div class="aw-legend">{legend}</div>')
+    st.caption(t("mapview_schematic" if route else "mapview_privacy", ui_lang))
 
 
 def render_route_timeline(resp: RecommendResponse) -> None:
@@ -1180,8 +1085,8 @@ def render_route_timeline(resp: RecommendResponse) -> None:
     rows = []
     for stop in rt.stops:
         num = rec_num.get(stop.poi_id)
-        badge = f'<span class="aw-tl-num">{num}</span>' if num else '<span class="aw-tl-num extra"></span>'
-        s_label, s_fg, _ = _status(stop.open_status)
+        badge = f'<span class="aw-tl-num">{num}</span>' if num else '<span class="aw-tl-num extra">·</span>'
+        s_label, _, _ = _status(stop.open_status)
         rows.append(f"""
             <div class="aw-tl-row">
                 {badge}
@@ -1189,7 +1094,7 @@ def render_route_timeline(resp: RecommendResponse) -> None:
                     <div class="aw-tl-name">{escape(stop.name)}</div>
                     <div class="aw-tl-meta">{t("route_row", lang, a=stop.arrival_offset_min, b=stop.departure_offset_min,
                         m=stop.from_prev_m, w=stop.from_prev_walk_min, v=stop.visit_min)}</div>
-                    <div class="aw-tl-meta" style="color:{s_fg};">{s_label}</div>
+                    <div class="aw-tl-status aw-status-{stop.open_status}"><i class="aw-dot"></i>{s_label}</div>
                 </div>
             </div>""")
     _html(f"""
@@ -1222,8 +1127,8 @@ def render_share(resp: RecommendResponse) -> None:
     lang = L()
     url = maps_route_url(stops)
     text = share_text(stops, lang if lang in LANGS else "en")
-    col_share, col_big = st.columns([3, 2], gap="small")
-    if col_big.button(t("share_big", lang), key="share_big", icon=":material/fullscreen:", use_container_width=True):
+    col_share, col_big = st.columns([3, 1], gap="small")
+    if col_big.button("QR", help=t("share_big", lang), key="share_big", icon=":material/fullscreen:", use_container_width=True):
         show_big_qr(url, t("share_hint", lang))
     with col_share.popover(t("share_btn", lang), icon=":material/qr_code_2:", use_container_width=True,
                            key="share_popover"):
@@ -1298,7 +1203,7 @@ def render_inspector(req: RecommendRequest, resp: RecommendResponse) -> None:
                 }
                 for c in cands
             ]),
-            use_container_width=True,
+            width="stretch",
             hide_index=True,
         )
     st.markdown(t("how_step3", lang))
@@ -1477,6 +1382,8 @@ if col_settings is None:
                     render_share(_last)
                     render_route_timeline(_last)
             else:
+                render_map(RecommendResponse(used_data=UsedData(rounded_coords=(r_lat, r_lon)),
+                                               recommendations=[], disclaimer=""), height=420)
                 _html(f"""
                     <div class="aw-map-empty">
                         <span class="msi">map</span>
