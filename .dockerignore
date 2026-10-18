@@ -1,0 +1,29 @@
+# Only runtime sources and locked dependency metadata enter the build context.
+**
+!Dockerfile
+!pyproject.toml
+!uv.lock
+!README.md
+!design.svg
+!backend/
+!backend/**
+!frontend/
+!frontend/**
+!styles/
+!styles/**
+!.streamlit/
+!.streamlit/config.toml
+!data/
+!data/*.json
+!scripts/
+!scripts/build_index.py
+
+# Keep local credentials and generated files out even inside allowed directories.
+**/.env
+**/.env.*
+**/secrets.toml
+**/__pycache__/
+**/*.py[cod]
+**/.DS_Store
+**/*.pem
+**/*.key
