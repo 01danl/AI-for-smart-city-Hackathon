@@ -8,6 +8,7 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 import backend.generation as generation
+from backend.generation import recommender
 from backend.generation import RecommendResponse, UsedData
 from backend.retrieval.intent import parse_query_intent
 from frontend import i18n
@@ -52,7 +53,7 @@ def _fake_generate(requests):
 def test_switching_to_kazakh_translates_ui_and_asks_in_kazakh(monkeypatch):
     st.cache_data.clear()
     requests = []
-    monkeypatch.setattr(generation, "generate_recommendations", _fake_generate(requests))
+    monkeypatch.setattr(recommender, "generate_recommendations", _fake_generate(requests))
     app = AppTest.from_file(str(APP_PATH), default_timeout=30).run()
     assert not app.exception
 

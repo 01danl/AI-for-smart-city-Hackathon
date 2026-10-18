@@ -10,6 +10,7 @@ from streamlit.testing.v1 import AppTest
 import backend.generation as generation
 from backend.generation import RecommendResponse, UsedData
 from backend.generation import localization
+from backend.generation import recommender
 from backend.generation.recommender import RecommendationItem
 from frontend import i18n
 
@@ -155,7 +156,12 @@ def test_chat_keeps_message_languages_and_dropdown_only_changes_interface(monkey
         return {"language": language, "requested_language": language, "labels": {}, "note": "",
                 "response_json": resp.model_dump_json()}
 
-    monkeypatch.setattr(generation, "generate_recommendations", generate)
+    # Streamlit can retain the old package re-export after reloading the implementation module.
+    def stale_package_export(req):
+        pytest.fail("The UI must call the implementation, not a stale package re-export")
+
+    monkeypatch.setattr(generation, "generate_recommendations", stale_package_export)
+    monkeypatch.setattr(recommender, "generate_recommendations", generate)
     monkeypatch.setattr(localization, "prepare_search_query", search)
     monkeypatch.setattr(localization, "localize_answer", localize)
     app = AppTest.from_file(str(Path(__file__).resolve().parents[1] / "frontend/app.py"),

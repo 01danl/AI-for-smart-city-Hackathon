@@ -9,6 +9,7 @@ import streamlit as st
 from streamlit.testing.v1 import AppTest
 
 import backend.generation as generation
+from backend.generation import recommender
 from backend.generation import RecommendationItem, RecommendResponse, UsedData
 from backend.retrieval import feedback
 
@@ -78,7 +79,7 @@ def test_ui_vote_is_recorded_and_closed_warning_shown(monkeypatch, votes_file):
         distance_m=200, walk_min=3, why="Рядом.", visit_min=30, what_to_do="Выпить кофе.",
         open_status="unknown", confidence_note="Часы не указаны.", source="poi_data",
     )
-    monkeypatch.setattr(generation, "generate_recommendations", lambda req: RecommendResponse(
+    monkeypatch.setattr(recommender, "generate_recommendations", lambda req: RecommendResponse(
         used_data=UsedData(rounded_coords=(req.lat, req.lon)), recommendations=[item], disclaimer="—",
     ))
     app = AppTest.from_file(str(APP_PATH), default_timeout=30).run()
