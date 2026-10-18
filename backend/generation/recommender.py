@@ -17,6 +17,7 @@ import re
 from typing import Literal
 
 from pydantic import BaseModel, Field
+from unidecode import unidecode
 
 from backend.retrieval import (
     BACKEND,
@@ -130,20 +131,39 @@ _CATEGORY_LABELS_RU: dict[str, str] = {
 }
 
 
+def _hours_note(status: str, lang: str, original: str) -> str:
+    """Localize schedule confidence without changing the verified status."""
+    notes = {
+        "en": {
+            "unknown": "Opening hours are unavailable or could not be interpreted; check before visiting.",
+            "confirmed_open": "Open according to the recorded schedule; hours may change.",
+            "likely_open": "May be open, but closing time or a full visit needs checking.",
+            "likely_closed": "Likely closed according to the recorded schedule; check before leaving.",
+        },
+        "kk": {
+            "unknown": "Жұмыс уақыты белгісіз немесе кестені анықтау мүмкін болмады; барар алдында нақтылаңыз.",
+            "confirmed_open": "Дерекқордағы кесте бойынша ашық; жұмыс уақыты өзгеруі мүмкін.",
+            "likely_open": "Ашық болуы мүмкін, бірақ жабылу уақытын және сапар ұзақтығын тексеріңіз.",
+            "likely_closed": "Дерекқордағы кесте бойынша жабық болуы мүмкін; жолға шығар алдында нақтылаңыз.",
+        },
+    }
+    return notes.get(lang, {}).get(status, original)
+
+
 def _build_facts_list(cand: Candidate, lang: str = "ru") -> list[str]:
     p = cand.poi
     cat_ru = _CATEGORY_LABELS_RU.get(p.category, p.category)
     if lang == "en":
         facts = [
             f"Category: {p.category} ({cand.distance_m} m, ~{cand.walk_min} min walk)",
-            f"Hours status: {cand.open_reason}",
+            f"Hours status: {_hours_note(cand.open_status, lang, cand.open_reason)}",
         ]
         if p.tags:
             facts.append(f"OSM tags: {', '.join(p.tags[:6])}")
     elif lang == "kk":
         facts = [
             f"Санат: {cat_ru} ({cand.distance_m} м, жаяу ~{cand.walk_min} мин)",
-            f"Жұмыс уақыты: {cand.open_reason}",
+            f"Жұмыс уақыты: {_hours_note(cand.open_status, lang, cand.open_reason)}",
         ]
         if p.tags:
             facts.append(f"OSM тегтері: {', '.join(p.tags[:6])}")
@@ -175,6 +195,7 @@ def _craft_deterministic_item(
     now_iso: str | None = None,
 ) -> RecommendationItem:
     p = cand.poi
+    display_name = unidecode(p.name) if lang == "en" else p.name
     visit_min = estimate_visit_minutes(p.category, intent.time_budget_min)
     adj_status, adj_reason, mins_left = check_visit_window(
         p.opening_hours, now_iso, walk_min=cand.walk_min, visit_min=visit_min
@@ -200,12 +221,12 @@ def _craft_deterministic_item(
         if "wheelchair" in tags_set:
             why += " Wheelchair accessible according to OSM."
         what_to_do = (
-            f"Spend ~{visit_min} min exploring {p.name}. "
+            f"Spend ~{visit_min} min exploring {display_name}. "
             + ("Check power outlet availability at corner tables upon arrival." if "power_outlets" in intent.semantic_tags else "Enjoy the local atmosphere and nearby walking boulevard.")
         )
         if p.category == "place_of_worship":
             what_to_do += " Please observe modest dress code and prayer times."
-        conf_note = adj_reason
+        conf_note = _hours_note(adj_status, lang, adj_reason)
         if adj_status == "unknown":
             conf_note += " — we never claim 'open now' when schedule data is missing."
         gen_note = (
@@ -220,7 +241,7 @@ def _craft_deterministic_item(
         what_to_do = f"Шамамен {visit_min} минут бөліп, «{p.name}» орнын аралаңыз."
         if p.category == "place_of_worship":
             what_to_do += " Киім үлгісі мен намаз/ғибадат уақытына құрметпен қарауды сұраймыз."
-        conf_note = adj_reason
+        conf_note = _hours_note(adj_status, lang, adj_reason)
         gen_note = "Іс-қимыл жоспары ЖИ арқылы ұсынылды [generated_idea], ал қашықтық пен тегтер POI базасынан алынды [poi_data]."
     else:
         # Russian (primary)
@@ -302,7 +323,7 @@ def _craft_deterministic_item(
 
     return RecommendationItem(
         poi_id=p.id,
-        name=p.name,
+        name=display_name,
         category=p.category,
         lat=p.lat,
         lon=p.lon,
@@ -438,7 +459,7 @@ def _build_disclaimer(
     return " ".join(parts)
 
 
-def generate_recommendations(req: RecommendRequest) -> RecommendResponse:
+def generate_recommendations(req: RecommendRequest, *, use_llm: bool = True) -> RecommendResponse:
     """End-to-end RAG recommendation pipeline with anti-hallucination guardrails."""
     intent = parse_query_intent(
         req.query,
@@ -487,7 +508,12 @@ def generate_recommendations(req: RecommendRequest) -> RecommendResponse:
 
     # Empty retrieval result (e.g. S8 user outside the city or too small radius)
     if not ranked_candidates:
-        empty_disclaimer = (
+        empty_disclaimer = {
+            "en": (f"No matching places were found within {req.max_distance_m} m. "
+                   "Try increasing the search radius or choosing a landmark in Astana. We do not invent places."),
+            "kk": (f"{req.max_distance_m} м радиуста сәйкес орындар табылмады. "
+                   "Іздеу радиусын үлкейтіңіз немесе Астанадағы бағдарды таңдаңыз. Біз орындарды ойдан шығармаймыз."),
+        }.get(intent.detected_lang) or (
             f"В радиусе {req.max_distance_m} м от точки {rounded} подходящих мест в базе POI не найдено. "
             "Система не выдумывает несуществующие места — попробуйте увеличить радиус поиска (например, до 3000–5000 м) или выбрать ориентир в городе."
         )
@@ -514,7 +540,7 @@ def generate_recommendations(req: RecommendRequest) -> RecommendResponse:
     gen_mode = "smart_fallback"
 
     # Attempt OpenRouter LLM generation if API key is configured
-    if os.getenv("OPENROUTER_API_KEY", "").strip():
+    if use_llm and os.getenv("OPENROUTER_API_KEY", "").strip():
         try:
             messages = build_rag_messages(
                 req.query,
@@ -548,11 +574,16 @@ def generate_recommendations(req: RecommendRequest) -> RecommendResponse:
                     valid_source: SourceType = src if src in ("poi_data", "generated_idea") else fallback_item.source
                     visit_m = int(item.get("visit_min") or fallback_item.visit_min)
                     visit_m = max(10, min(240, visit_m))
+                    display_name = item.get("display_name")
+                    name = cand.poi.name
+                    if (intent.detected_lang == "en" and isinstance(display_name, str)
+                            and display_name.strip() and display_name.isascii() and len(display_name) <= 200):
+                        name = display_name.strip()
 
                     recommendations.append(
                         RecommendationItem(
                             poi_id=cand.poi.id,
-                            name=cand.poi.name,
+                            name=name,
                             category=cand.poi.category,
                             lat=cand.poi.lat,
                             lon=cand.poi.lon,

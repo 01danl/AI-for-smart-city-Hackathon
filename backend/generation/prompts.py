@@ -40,6 +40,7 @@ SYSTEM_PROMPT = """Ты — интеллектуальный городской 
      "recommendations": [
        {
          "poi_id": "id из списка кандидатов",
+         "display_name": "Название из базы для ru/kk; English translation or transliteration for other languages",
          "why": "Краткое объяснение (1-2 предложения), почему место подходит под запрос и локацию",
          "visit_min": 45,
          "what_to_do": "Конкретный микро-план действий на месте (что посмотреть/сделать/заказать)",
@@ -88,7 +89,13 @@ def build_rag_messages(
         "ru": "Отвечай на русском языке (кратко, дружелюбно, конкретно).",
         "kk": "Жауапты қазақ тілінде жаз (нақты, қысқа әрі түсінікті).",
         "en": "Respond in English (concise, helpful, concrete).",
-    }.get(lang, "Отвечай на русском языке.")
+    }.get(lang, f"Respond in the language with ISO code {lang} (concise, helpful, concrete).")
+    lang_instruction += (
+        " Use the source place name for Russian and Kazakh. For every other language, "
+        "return an English display_name for the same venue (translate descriptive words and "
+        "transliterate proper names). Use that English name in why and what_to_do as well. "
+        "Never substitute another place or claim a translated name is official."
+    )
 
     user_payload = {
         "user_query": query,
